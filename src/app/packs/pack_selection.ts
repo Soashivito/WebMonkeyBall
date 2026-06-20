@@ -5,6 +5,8 @@ import {
   hasPackForGameSource,
   setActivePack,
   setPackEnabled,
+  packIdentity,
+  normalizeIdentity,
 } from '../../pack.js';
 import type { LoadedPack } from '../../pack.js';
 
@@ -100,26 +102,42 @@ export class PackSelectionController {
   }
 
   registerLoadedPack(pack: LoadedPack) {
-    const key = this.createPackKey(pack);
+    const key = packIdentity(pack);
     this.loadedPacks.set(key, pack);
     this.activePackKey = key;
     setActivePack(pack);
     setPackEnabled(true);
   }
 
-  private normalizePackKey(base: string) {
-    return base.replace(/\s+/g, '-').toLowerCase();
+  registerLoadedPackQuiet(pack: LoadedPack) {
+    this.loadedPacks.set(packIdentity(pack), pack);
   }
 
-  private createPackKey(pack: LoadedPack) {
-    const base = this.normalizePackKey(pack.manifest.id || pack.manifest.name || 'pack');
-    if (!this.loadedPacks.has(base)) {
-      return base;
+  hasPackIdentity(identity: string): boolean {
+    return this.loadedPacks.has(normalizeIdentity(identity));
+  }
+
+  getActivePackInfo(): { id: string; name: string; gameSource: GameSource } | null {
+    const pack = getActivePack();
+    if (!pack) {
+      return null;
     }
-    let counter = 2;
-    while (this.loadedPacks.has(`${base}-${counter}`)) {
-      counter += 1;
+    return { id: packIdentity(pack), name: pack.manifest.name ?? 'Custom pack', gameSource: pack.manifest.gameSource };
+  }
+
+  selectPackByIdentity(identity: string): boolean {
+    const key = normalizeIdentity(identity);
+    const pack = this.loadedPacks.get(key);
+    if (!pack) {
+      return false;
     }
-    return `${base}-${counter}`;
+    this.activePackKey = key;
+    setActivePack(pack);
+    setPackEnabled(true);
+    if (this.gameSourceSelect) {
+      this.refreshUi();
+      this.gameSourceSelect.value = `pack:${key}`;
+    }
+    return true;
   }
 }

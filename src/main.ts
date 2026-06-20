@@ -118,6 +118,7 @@ import {
   loadPackFromZipFile,
 } from './pack.js';
 import type { LoadedPack } from './pack.js';
+import { savePack as persistPackToStore, getAllPacks as getStoredPacks } from './app/packs/pack_store.js';
 
 const LEADERBOARDS_MENU_ENABLED = false;
 declare const __APP_COMMIT__: string | undefined;
@@ -423,7 +424,35 @@ export function runMainApp() {
     return fetchPackSlice(path);
   }
   
+  async function restorePersistedPacks() {
+    try {
+      const stored = await getStoredPacks();
+      for (const rec of stored) {
+        try {
+          if (packSelection.hasPackIdentity(rec.identity)) {
+            continue;
+          }
+          const file = new File([rec.bytes], `${rec.name || 'pack'}.zip`, { type: 'application/zip' });
+          const pack = await loadPackFromZipFile(file);
+          packSelection.registerLoadedPackQuiet(pack);
+        } catch (err) {
+          console.warn('Pack store: failed to restore a pack.', err);
+        }
+      }
+      packSelection.refreshUi();
+      courseSelection.updateSmb2ChallengeStages();
+      courseSelection.updateSmb2StoryOptions();
+      courseSelection.updateSmb1Stages();
+      courseSelection.updateGameSourceFields();
+      syncCoursePlaySourceOptions();
+      syncCoursePlaySourceSelection();
+    } catch (err) {
+      console.warn('Pack store: restore failed.', err);
+    }
+  }
+
   async function initPackFromQuery() {
+    await restorePersistedPacks();
     await packLoader.initFromQuery();
   }
   
@@ -448,6 +477,17 @@ export function runMainApp() {
       if (hudStatus) {
         hudStatus.textContent = message;
       }
+    },
+    persistPack: (pack, bytes) => {
+      const info = packSelection.getActivePackInfo();
+      const identity = info?.id ?? (pack.manifest.id || pack.manifest.name || 'pack').replace(/\s+/g, '-').toLowerCase();
+      void persistPackToStore({
+        identity,
+        name: pack.manifest.name ?? 'Custom pack',
+        gameSource: pack.manifest.gameSource,
+        bytes,
+        updatedAt: Date.now(),
+      }).catch((err) => console.warn('Pack store: failed to persist pack.', err));
     },
   });
   
@@ -1113,6 +1153,10 @@ export function runMainApp() {
     sanitizeLobbyName,
     getDefaultGameModeOptions: (mode) => gamemodeOptions.getDefaultOptions(mode),
     normalizeGameModeOptions: (mode, raw) => gamemodeOptions.normalizeOptions(mode, raw, true),
+    getActivePackInfo: () => {
+      const info = packSelection.getActivePackInfo();
+      return info ? { id: info.id, name: info.name } : null;
+    },
   });
   
   const leaderboardSessionFlow = new LeaderboardSessionController({

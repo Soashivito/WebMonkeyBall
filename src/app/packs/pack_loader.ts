@@ -6,6 +6,7 @@ type PackLoaderOptions = {
   loadPackFromFileList: (files: FileList) => Promise<LoadedPack>;
   applyLoadedPack: (pack: LoadedPack) => Promise<void>;
   setHudStatus: (message: string) => void;
+  persistPack?: (pack: LoadedPack, bytes: ArrayBuffer) => void;
 };
 
 type PackPickerBindingsOptions = {
@@ -23,6 +24,7 @@ export class PackLoader {
   private readonly loadPackFromFileList: PackLoaderOptions['loadPackFromFileList'];
   private readonly applyLoadedPack: PackLoaderOptions['applyLoadedPack'];
   private readonly setHudStatus: PackLoaderOptions['setHudStatus'];
+  private readonly persistPack: PackLoaderOptions['persistPack'];
 
   constructor(options: PackLoaderOptions) {
     this.loadPackFromUrl = options.loadPackFromUrl;
@@ -30,6 +32,7 @@ export class PackLoader {
     this.loadPackFromFileList = options.loadPackFromFileList;
     this.applyLoadedPack = options.applyLoadedPack;
     this.setHudStatus = options.setHudStatus;
+    this.persistPack = options.persistPack;
   }
 
   async initFromQuery() {
@@ -80,8 +83,10 @@ export class PackLoader {
         return;
       }
       try {
+        const bytes = await file.arrayBuffer();
         const pack = await this.loadPackFromZipFile(file);
         await this.applyLoadedPack(pack);
+        this.persistPack?.(pack, bytes);
       } catch (error) {
         console.error(error);
         this.setHudStatus('Failed to load pack.');
