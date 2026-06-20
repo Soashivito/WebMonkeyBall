@@ -68,6 +68,7 @@ type PeerSessionDeps = {
   pendingSpawnStageSeq: Map<number, number>;
   maybeSendStageSync: () => void;
   getStageBasePath: (source: GameSource) => string;
+  getActivePackId?: () => string | undefined;
   sendSnapshotToClient: (playerId: number) => void;
   broadcastRoomUpdate: () => void;
   sendLobbyHeartbeat: (nowMs: number, force?: boolean) => void;
@@ -226,6 +227,7 @@ export class PeerSessionController {
           gameModeOptions: Object.keys(liveModeOptions).length > 0 ? liveModeOptions : undefined,
           course: liveState.currentCourse,
           stageBasePath: this.deps.getStageBasePath(liveState.currentGameSource),
+          packId: this.deps.getActivePackId?.(),
           lateJoin: joinAsSpectator,
         });
       }

@@ -219,6 +219,7 @@ const lobbyBrowser = new LobbyBrowserController({
 });
 
 const peerSession = new PeerSessionController({
+  getActivePackId: () => packSelection.getActivePackInfo()?.id,
   lobbyClient,
   lobbyStatus,
   game,
@@ -694,6 +695,15 @@ snapshotFlow = new SnapshotFlowController({
   snapshotMismatchCooldownMs: NETPLAY_SNAPSHOT_MISMATCH_COOLDOWN_MS,
 });
 netplayMessageFlow = new NetplayMessageFlowController({
+  applyRoomPack: (packId) => {
+    if (!packId) {
+      return 'not-required';
+    }
+    if (packSelection.getActivePackInfo()?.id === packId) {
+      return 'loaded';
+    }
+    return packSelection.selectPackByIdentity(packId) ? 'loaded' : 'missing';
+  },
   game,
   lobbyStatus,
   getNetplayState: () => state.netplayState,
@@ -914,6 +924,7 @@ stageFlow = new StageFlowController({
   isNaomiStage,
 });
 matchStartFlow = new MatchStartFlowController({
+  getActivePackId: () => packSelection.getActivePackInfo()?.id,
   game,
   audio,
   resumeButton,

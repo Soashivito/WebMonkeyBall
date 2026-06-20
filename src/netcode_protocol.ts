@@ -24,6 +24,8 @@ export type RoomMeta = {
   stageLabel?: string;
   stageId?: number;
   roomName?: string;
+  packId?: string;
+  packName?: string;
 };
 
 export type RoomInfo = {

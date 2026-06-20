@@ -26,6 +26,7 @@ type RoomMetaDeps = {
   sanitizeLobbyName: (value: string) => string | undefined;
   getDefaultGameModeOptions: (mode: MultiplayerGameMode) => RoomGameModeOptions;
   normalizeGameModeOptions: (mode: MultiplayerGameMode, raw: unknown) => RoomGameModeOptions;
+  getActivePackInfo: () => { id: string; name: string } | null;
 };
 
 export class RoomMetaController {
@@ -81,6 +82,8 @@ export class RoomMetaController {
       stageLabel: labels.stageLabel,
       stageId,
       roomName: roomName ?? undefined,
+      packId: this.deps.getActivePackInfo()?.id,
+      packName: this.deps.getActivePackInfo()?.name,
     };
   }
 
@@ -105,6 +108,8 @@ export class RoomMetaController {
       courseLabel: labels.courseLabel,
       stageLabel: labels.stageLabel,
       roomName: roomName ?? undefined,
+      packId: this.deps.getActivePackInfo()?.id,
+      packName: this.deps.getActivePackInfo()?.name,
     };
   }
 }

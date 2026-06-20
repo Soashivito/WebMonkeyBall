@@ -22,6 +22,7 @@ type StartFlowDeps = {
   setActiveGameSource: (source: GameSource) => void;
   setCurrentSmb2LikeMode: (mode: 'story' | 'challenge' | null) => void;
   getStageBasePath: (gameSource: GameSource) => string;
+  getActivePackId?: () => string | undefined;
   buildSmb1CourseConfig: () => { difficulty: string; stageIndex: number };
   buildSmb2CourseConfig: () => any;
   buildMb2wsCourseConfig: () => any;
@@ -168,6 +169,7 @@ export class MatchStartFlowController {
       gameModeOptions: Object.keys(gameModeOptions).length > 0 ? gameModeOptions : undefined,
       course: config,
       stageBasePath: this.deps.getStageBasePath(activeGameSource),
+      packId: this.deps.getActivePackId?.(),
     });
   }
 

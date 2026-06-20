@@ -51,6 +51,7 @@ type MessageFlowDeps = {
   setLobbyRoom: (room: RoomInfo) => void;
   setActiveGameSource: (source: GameSource) => void;
   getStageBasePath: (source: GameSource) => string;
+  applyRoomPack?: (packId: string | undefined) => 'loaded' | 'not-required' | 'missing';
   setCurrentSmb2LikeMode: (mode: string | null) => void;
   startStage: (course: any) => Promise<void>;
   sendSnapshotToClient: (playerId: number, frame?: number) => void;
@@ -513,6 +514,15 @@ export class NetplayMessageFlowController {
       }
       this.deps.promotePendingSpawns(msg.stageSeq);
       this.deps.setPendingSnapshot(null);
+      const packResult = this.deps.applyRoomPack?.((msg as { packId?: string }).packId) ?? 'not-required';
+      if (packResult === 'missing') {
+        if (this.deps.lobbyStatus) {
+          this.deps.lobbyStatus.textContent =
+            'This room is playing a custom pack you have not loaded. Load its .zip once (Singleplayer > Practice), then rejoin.';
+        }
+        this.deps.endMatchToLobby();
+        return;
+      }
       this.deps.setActiveGameSource(msg.gameSource);
       this.deps.game.setGameSource(msg.gameSource);
       this.deps.game.setMultiplayerGameMode(mode);

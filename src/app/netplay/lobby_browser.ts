@@ -133,7 +133,8 @@ export class LobbyBrowserController {
         const courseLabel = room.meta?.courseLabel ?? room.courseId ?? 'Unknown';
         const stageLabel = room.meta?.stageLabel ? ` • ${room.meta.stageLabel}` : '';
         const modeLabel = ` • ${this.deps.formatMultiplayerGameModeLabel(this.deps.getRoomGameMode(room))}`;
-        subtitle.textContent = `${sourceLabel} • ${courseLabel}${stageLabel}${modeLabel}`;
+        const packLabel = room.meta?.packName ? ` • Pack: ${room.meta.packName}` : '';
+        subtitle.textContent = `${sourceLabel} • ${courseLabel}${stageLabel}${modeLabel}${packLabel}`;
         const meta = document.createElement('div');
         meta.className = 'lobby-item-meta';
         const status = room.meta?.status === 'in_game' ? 'In Game' : 'Waiting';
