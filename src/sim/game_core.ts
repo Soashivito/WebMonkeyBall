@@ -342,6 +342,7 @@ export class GameCore {
   public lives: number;
   public stageTimeLimitFrames: number;
   public stageTimerFrames: number;
+  public multiplayerGameModeOptions: Record<string, string | number | boolean> | null = null;
   public latchedClearTimerFrames: number | null;
   public statusText: string;
   public loadToken: number;

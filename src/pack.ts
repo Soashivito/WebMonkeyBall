@@ -194,6 +194,14 @@ export function getPackCourseData(): PackCourseData | null {
   return activePack?.manifest.courses ?? null;
 }
 
+export function normalizeIdentity(value: string): string {
+  return value.replace(/\s+/g, '-').toLowerCase();
+}
+
+export function packIdentity(pack: LoadedPack): string {
+  return normalizeIdentity(pack.manifest.id || pack.manifest.name || 'pack');
+}
+
 export function getPackStageName(stageId: number): string | null {
   if (!packEnabled) {
     return null;
