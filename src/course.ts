@@ -1,5 +1,6 @@
 import { DEFAULT_STAGE_TIME, stageLabelFromName, INFO_FLAGS } from './shared/constants/index.js';
 import { getPackStageRules } from './pack.js';
+import { randomizerEnabled, randomizerAdvanceCourse } from './randomizer_core.js';
 
 const DEFAULT_SMB1_PARSER_ID = 'smb1_stagedef';
 const DEFAULT_SMB1_RULESET_ID = 'smb1';
@@ -282,17 +283,18 @@ export class Course {
   getFloorInfo() {
     const total = this.stageList.length;
     const current = this.currentFloor;
+    const activeDifficulty = this.stageList[this.stageIndex]?.difficulty ?? this.difficulty;
     let prefix = 'FLOOR';
-    if (typeof this.difficulty === 'string') {
-      if (this.difficulty === 'master') {
+    if (typeof activeDifficulty === 'string') {
+      if (activeDifficulty === 'master') {
         prefix = 'MASTER';
-      } else if (this.difficulty.includes('extra')) {
+      } else if (activeDifficulty.includes('extra')) {
         prefix = 'EXTRA';
       }
     }
-    const difficultyIndex = this.difficulty === 'beginner' || this.difficulty === 'beginner-extra'
+    const difficultyIndex = activeDifficulty === 'beginner' || activeDifficulty === 'beginner-extra'
       ? 0
-      : this.difficulty === 'advanced' || this.difficulty === 'advanced-extra'
+      : activeDifficulty === 'advanced' || activeDifficulty === 'advanced-extra'
         ? 1
         : 2;
     const difficultyIconIndex = prefix === 'MASTER' ? 4 : difficultyIndex + 1;
@@ -363,6 +365,9 @@ export class Course {
     if (!isFloorClear(info)) {
       return false;
     }
+    if (randomizerEnabled()) {
+      return randomizerAdvanceCourse(this);
+    }
     const goalType = info.goalType ?? 'B';
     const warpDistance = getWarpDistance(entry, goalType);
     const nextIndex = this.stageIndex + warpDistance;
@@ -380,6 +385,9 @@ export class Course {
   }
 
   advanceSingleStage() {
+    if (randomizerEnabled()) {
+      return randomizerAdvanceCourse(this);
+    }
     const nextIndex = this.stageIndex + 1;
     if (nextIndex >= this.stageList.length) {
       return false;

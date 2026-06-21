@@ -1,5 +1,6 @@
 import { DEFAULT_STAGE_TIME, GAME_SOURCES } from './shared/constants/index.js';
 import { getPackCourseData, getPackStageRules, getPackStageTimeOverride, hasPackForGameSource } from './pack.js';
+import { randomizerEnabled, randomizerAdvanceCourse } from './randomizer_core.js';
 
 const DEFAULT_SMB2_PARSER_ID = 'smb2_stagedef';
 const DEFAULT_SMB2_RULESET_ID = 'smb2';
@@ -294,6 +295,9 @@ export class Smb2Course {
     timerCurr: number;
     u_currStageId: number;
   }) {
+    if (randomizerEnabled()) {
+      return randomizerAdvanceCourse(this);
+    }
     if (this.currentIndex + 1 >= this.stageList.length) {
       return false;
     }
@@ -318,6 +322,9 @@ export class Smb2Course {
   }
 
   advanceSingleStage() {
+    if (randomizerEnabled()) {
+      return randomizerAdvanceCourse(this);
+    }
     const nextIndex = this.currentIndex + 1;
     if (nextIndex >= this.stageList.length) {
       return false;
@@ -329,4 +336,24 @@ export class Smb2Course {
     this.currentStageRulesetId = entry?.rulesetId ?? this.currentStageRulesetId;
     return true;
   }
+}
+
+export function listSmb2ChallengeDifficulties(): string[] {
+  const packCourses = getPackCourses();
+  const packOrder = packCourses?.challenge?.order;
+  if (packOrder && Object.keys(packOrder).length > 0) {
+    return Object.keys(packOrder);
+  }
+  return Object.keys(SMB2_CHALLENGE_ORDER);
+}
+
+export function getSmb2ChallengeStageEntries(difficulty: string) {
+  const packCourses = getPackCourses();
+  const packOrder = packCourses?.challenge?.order?.[difficulty];
+  const list = packOrder ?? SMB2_CHALLENGE_ORDER[difficulty as keyof typeof SMB2_CHALLENGE_ORDER] ?? [];
+  const stageList = list.map((entry) => resolveStageEntry(normalizeStageEntry(entry)));
+  const packBonus = packCourses?.challenge?.bonus?.[difficulty];
+  const defaultBonus = SMB2_CHALLENGE_BONUS[difficulty as keyof typeof SMB2_CHALLENGE_ORDER];
+  const bonusFlags = normalizeBonusFlags(stageList, packBonus ?? defaultBonus);
+  return { stageList, bonusFlags };
 }
