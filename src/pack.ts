@@ -78,6 +78,7 @@ export type PackManifest = {
 
 export type PackProvider = {
   fetch: (path: string) => Promise<ArrayBuffer>;
+  has?: (path: string) => boolean;
 };
 
 export type LoadedPack = {
@@ -171,6 +172,28 @@ export function isPackEnabled() {
 
 export function getActivePack() {
   return activePack;
+}
+
+export function packStageHasModel(stageId: number): boolean {
+  const pack = activePack;
+  if (!pack || !pack.provider.has) {
+    return true;
+  }
+  const idStr = String(stageId).padStart(3, '0');
+  const relPath = `st${idStr}/st${idStr}.gma`;
+  const resolved = joinBasePath(pack.basePath, relPath);
+  return pack.provider.has(normalizePackPath(resolved));
+}
+
+export function packStageHasStagedef(stageId: number): boolean {
+  const pack = activePack;
+  if (!pack || !pack.provider.has) {
+    return true;
+  }
+  const idStr = String(stageId).padStart(3, '0');
+  const relPath = `st${idStr}/STAGE${idStr}.lz`;
+  const resolved = joinBasePath(pack.basePath, relPath);
+  return pack.provider.has(normalizePackPath(resolved));
 }
 
 export function getPackStageEnv(stageId: number): PackStageEnv | null {
@@ -339,6 +362,7 @@ export async function loadPackFromFileList(fileList: FileList): Promise<LoadedPa
       }
       return file.arrayBuffer();
     },
+    has: (path: string) => map.has(normalizePackPath(path)),
   };
   return { manifest, provider, basePath: '' };
 }
@@ -355,6 +379,7 @@ function loadPackFromZipBuffer(buffer: ArrayBuffer, basePath: string): LoadedPac
   }
   const manifest = JSON.parse(new TextDecoder('utf-8').decode(manifestBytes)) as PackManifest;
   const provider: PackProvider = {
+    has: (path: string) => map.has(normalizePackPath(path)),
     fetch: async (path: string) => {
       const normalized = normalizePackPath(path);
       const entry = map.get(normalized);
