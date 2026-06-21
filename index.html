@@ -7,6 +7,7 @@
 
   <!-- iOS: run without Safari UI when launched from Home Screen -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: light)">
@@ -152,6 +153,17 @@
           <span>Difficulty</span>
           <select id="course-play-difficulty"></select>
         </label>
+      </div>
+      <div class="panel-section">
+        <label class="checkbox-field">
+          <input type="checkbox" id="randomizer-toggle-sp" />
+          <span>Randomizer</span>
+        </label>
+        <label class="checkbox-field">
+          <input type="checkbox" id="randomizer-total-sp" />
+          <span>Total randomizer</span>
+        </label>
+        <div id="randomizer-difficulties-sp" class="randomizer-difficulties hidden"></div>
       </div>
       <div class="panel-section">
         <button id="course-play-start" type="button">Start Course</button>
@@ -374,6 +386,14 @@
             </select>
           </label>
           <div id="lobby-gamemode-options" class="lobby-gamemode-options hidden"></div>
+          <label class="checkbox-field">
+            <input type="checkbox" id="randomizer-toggle-mp" />
+            <span>Randomizer</span>
+          </label>
+          <label class="checkbox-field">
+            <input type="checkbox" id="randomizer-total-mp" />
+            <span>Total randomizer</span>
+          </label>
           <label class="field">
             <span>Max Players</span>
             <select id="lobby-max-players">
