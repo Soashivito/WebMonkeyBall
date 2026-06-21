@@ -1,6 +1,10 @@
 import { Course } from '../course.js';
 import { Smb2Course, type Smb2CourseConfig } from '../course_smb2.js';
 import { Mb2wsCourse, type Mb2wsCourseConfig } from '../course_mb2ws.js';
+import { buildRandomizerPool, buildTotalRandomizerPool, RANDOMIZER_PACK_KEY } from '../app/gameplay/randomizer_pool.js';
+import { applyRandomizerPool } from '../randomizer_core.js';
+import { isRandomizerEnabled, getRandomizerGroups, isTotalRandomizerEnabled } from '../randomizer_state.js';
+import { getActivePack, hasPackForGameSource } from '../pack.js';
 import { loadGoalTapeAnchorY, loadStageDef, loadStageModelBounds, StageRuntime } from '../stage.js';
 import { Input } from '../input.js';
 import { AudioManager } from '../audio.js';
@@ -2325,6 +2329,27 @@ export class GameCore {
       } else {
         this.course = new Course(difficulty.difficulty, difficulty.stageIndex);
       }
+
+      const totalOn = isTotalRandomizerEnabled();
+      if (isRandomizerEnabled() || totalOn) {
+        if (totalOn) {
+          const pool = buildTotalRandomizerPool();
+          if (pool) {
+            applyRandomizerPool(this.course, pool.stageList, pool.bonusFlags);
+          }
+        } else {
+          let keys = getRandomizerGroups();
+          if (hasPackForGameSource(this.gameSource) && getActivePack()) {
+            keys = [RANDOMIZER_PACK_KEY];
+          }
+          if (keys.length > 0) {
+            const pool = buildRandomizerPool(this.gameSource, keys);
+            if (pool) {
+              applyRandomizerPool(this.course, pool.stageList, pool.bonusFlags);
+            }
+          }
+        }
+      }
     } catch (err) {
       this.statusText = 'Missing course data.';
       console.error(err);
@@ -2335,6 +2360,13 @@ export class GameCore {
     if (this.course) {
       this.stageParserId = (this.course as any).currentStageParserId ?? this.stageParserId;
       this.stageRulesetId = (this.course as any).currentStageRulesetId ?? this.stageRulesetId;
+      {
+        const totalSrc = (this.course as any).currentStageGameSource as GameSource | undefined;
+        if (totalSrc && (STAGE_BASE_PATHS as any)[totalSrc] && totalSrc !== this.gameSource) {
+          this.gameSource = totalSrc;
+          this.stageBasePath = (STAGE_BASE_PATHS as any)[totalSrc];
+        }
+      }
       this.syncRulesetFromStage();
     }
 
@@ -3781,6 +3813,13 @@ export class GameCore {
     }
     this.stageParserId = (this.course as any).currentStageParserId ?? this.stageParserId;
     this.stageRulesetId = (this.course as any).currentStageRulesetId ?? this.stageRulesetId;
+      {
+        const totalSrc = (this.course as any).currentStageGameSource as GameSource | undefined;
+        if (totalSrc && (STAGE_BASE_PATHS as any)[totalSrc] && totalSrc !== this.gameSource) {
+          this.gameSource = totalSrc;
+          this.stageBasePath = (STAGE_BASE_PATHS as any)[totalSrc];
+        }
+      }
     this.syncRulesetFromStage();
     try {
       await this.loadStage(this.course.currentStageId);
