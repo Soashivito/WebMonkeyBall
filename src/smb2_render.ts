@@ -746,23 +746,27 @@ function convertStageModelInstances(list: any[]): StageModelInstance[] {
   }));
 }
 
-export function getSmb2StageInfo(stageId: number): StageInfo {
+export function getSmb2StageInfo(stageId: number, usePackEnv: boolean = true): StageInfo {
   const themeId = SMB2_STAGE_THEME_IDS[stageId] ?? 0;
   const fileName = SMB2_THEME_BG_NAMES[themeId] ?? '';
   const baseInfo = getDefaultSmb2BgInfo(themeId, fileName);
   return {
     id: stageId as any,
-    bgInfo: applyPackBgInfo(stageId, GAME_SOURCES.SMB2, baseInfo, fileName),
+    bgInfo: usePackEnv
+      ? applyPackBgInfo(stageId, GAME_SOURCES.SMB2, baseInfo, fileName)
+      : { ...baseInfo, fileName },
   };
 }
 
-export function getMb2wsStageInfo(stageId: number): StageInfo {
+export function getMb2wsStageInfo(stageId: number, usePackEnv: boolean = true): StageInfo {
   const themeId = MB2WS_STAGE_THEME_IDS[stageId] ?? 0;
   const fileName = SMB2_THEME_BG_NAMES[themeId] ?? '';
   const baseInfo = getDefaultSmb2BgInfo(themeId, fileName);
   return {
     id: stageId as any,
-    bgInfo: applyPackBgInfo(stageId, GAME_SOURCES.MB2WS, baseInfo, fileName),
+    bgInfo: usePackEnv
+      ? applyPackBgInfo(stageId, GAME_SOURCES.MB2WS, baseInfo, fileName)
+      : { ...baseInfo, fileName },
   };
 }
 

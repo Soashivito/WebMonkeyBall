@@ -49,14 +49,15 @@ export class StageLoader {
     return this.smb1BallCommonGmaPromise;
   }
 
-  async loadSmb1(stageId: number): Promise<StageData> {
+  async loadSmb1(stageId: number, basePathOverride?: string): Promise<StageData> {
     const stageIdStr = String(stageId).padStart(3, '0');
     const stageInfo = STAGE_INFO_MAP.get(stageId as StageId);
     if (!stageInfo) {
       throw new Error(`Missing StageInfo for stage ${stageId}`);
     }
 
-    const stageBasePath = this.getStageBasePath(GAME_SOURCES.SMB1);
+    const stageBasePath =
+      basePathOverride !== undefined ? basePathOverride : this.getStageBasePath(GAME_SOURCES.SMB1);
     const stagedefPath = `${stageBasePath}/st${stageIdStr}/STAGE${stageIdStr}.lz`;
     const stageGmaPath = `${stageBasePath}/st${stageIdStr}/st${stageIdStr}.gma`;
     const stageTplPath = `${stageBasePath}/st${stageIdStr}/st${stageIdStr}.tpl`;
@@ -153,16 +154,20 @@ export class StageLoader {
     };
   }
 
-  async loadSmb2Like(stageId: number, stage: any, gameSource: GameSource): Promise<StageData> {
+  async loadSmb2Like(stageId: number, stage: any, gameSource: GameSource, basePathOverride?: string, isPackStage: boolean = false): Promise<StageData> {
     if (!stage || stage.format !== 'smb2') {
       throw new Error('Missing SMB2 stage data.');
     }
     const stageIdStr = String(stageId).padStart(3, '0');
     const stageInfo =
-      gameSource === GAME_SOURCES.MB2WS ? getMb2wsStageInfo(stageId) : getSmb2StageInfo(stageId);
+      gameSource === GAME_SOURCES.MB2WS
+        ? getMb2wsStageInfo(stageId, isPackStage)
+        : getSmb2StageInfo(stageId, isPackStage);
     const stagedef = convertSmb2StageDef(stage);
 
-    const stageBasePath = this.getStageBasePath(gameSource) ?? STAGE_BASE_PATHS[GAME_SOURCES.SMB2];
+    const stageBasePath =
+      (basePathOverride !== undefined ? basePathOverride : this.getStageBasePath(gameSource))
+      ?? STAGE_BASE_PATHS[GAME_SOURCES.SMB2];
     const stageGmaPath = `${stageBasePath}/st${stageIdStr}/st${stageIdStr}.gma`;
     const stageTplPath = `${stageBasePath}/st${stageIdStr}/st${stageIdStr}.tpl`;
 
@@ -172,8 +177,22 @@ export class StageLoader {
     const commonNlTplPath = `${stageBasePath}/init/common.lz`;
 
     const bgName = stageInfo.bgInfo.fileName;
-    const bgGmaPath = bgName ? `${stageBasePath}/bg/${bgName}.gma` : '';
-    const bgTplPath = bgName ? `${stageBasePath}/bg/${bgName}.tpl` : '';
+    const emptySlice = () => new ArrayBufferSlice(new ArrayBuffer(0));
+    const baseBgBasePath =
+      STAGE_BASE_PATHS[gameSource === GAME_SOURCES.MB2WS ? GAME_SOURCES.MB2WS : GAME_SOURCES.SMB2];
+    const fetchBgSlice = async (rel: string): Promise<ArrayBufferSlice> => {
+      try {
+        return await this.fetchSlice(`${stageBasePath}/${rel}`);
+      } catch (_primaryErr) {
+        if (stageBasePath !== baseBgBasePath) {
+          try {
+            return await this.fetchSlice(`${baseBgBasePath}/${rel}`);
+          } catch (_fallbackErr) {
+          }
+        }
+        return emptySlice();
+      }
+    };
     const ballCommonGmaPromise = this.loadSmb1BallCommonGma();
 
     const [
@@ -194,8 +213,8 @@ export class StageLoader {
         this.fetchSlice(commonTplPath),
         this.fetchSlice(commonNlPath),
         this.fetchSlice(commonNlTplPath),
-        bgName ? this.fetchSlice(bgGmaPath) : Promise.resolve(new ArrayBufferSlice(new ArrayBuffer(0))),
-        bgName ? this.fetchSlice(bgTplPath) : Promise.resolve(new ArrayBufferSlice(new ArrayBuffer(0))),
+        bgName ? fetchBgSlice(`bg/${bgName}.gma`) : Promise.resolve(emptySlice()),
+        bgName ? fetchBgSlice(`bg/${bgName}.tpl`) : Promise.resolve(emptySlice()),
         ballCommonGmaPromise,
       ]);
 
@@ -206,7 +225,7 @@ export class StageLoader {
     const commonNlTpl = parseAVTpl(decompressLZ(commonNlTplBuf), 'common-nl');
     const nlObj = Nl.parseObj(decompressLZ(commonNlBuf), commonNlTpl);
 
-    const bgGma = bgName
+    const bgGma = bgName && bgGmaBuf.byteLength > 0
       ? Gma.parseGma(bgGmaBuf, parseAVTpl(bgTplBuf, bgName))
       : { nameMap: new Map(), idMap: new Map() };
 

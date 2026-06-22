@@ -2,6 +2,8 @@ import type { Game } from '../../game.js';
 import { GAME_SOURCES, type GameSource } from '../../shared/constants/index.js';
 import { StageId, STAGE_INFO_MAP } from '../../noclip/SuperMonkeyBall/StageInfo.js';
 import { getMb2wsStageInfo, getSmb2StageInfo } from '../../smb2_render.js';
+import { getPackStageBasePath } from '../../pack.js';
+import { RANDO_DEBUG } from '../../randomizer_state.js';
 
 type StageFlowDeps = {
   game: Game;
@@ -27,8 +29,8 @@ type StageFlowDeps = {
   setLobbyRoomMeta: (meta: any) => void;
   broadcastRoomUpdate: () => void;
   sendLobbyHeartbeatNow: () => void;
-  loadRenderStage: (stageId: number) => Promise<any>;
-  loadRenderStageSmb2: (stageId: number, stage: any, gameSource: GameSource) => Promise<any>;
+  loadRenderStage: (stageId: number, basePath?: string) => Promise<any>;
+  loadRenderStageSmb2: (stageId: number, stage: any, gameSource: GameSource, basePath?: string, isPack?: boolean) => Promise<any>;
   getStageBasePath: (gameSource: GameSource) => string;
   prefetchPath: (path: string) => void;
   isNaomiStage: (stageId: number) => boolean;
@@ -170,15 +172,56 @@ export class StageFlowController {
       return;
     }
 
-    const activeGameSource = this.deps.getActiveGameSource();
+    const activeGameSource = this.deps.game.gameSource ?? this.deps.getActiveGameSource();
+    const dbgBasePath = this.deps.game.stageBasePath;
+    const packBasePath = getPackStageBasePath(activeGameSource);
+    const dbgIsPack =
+      Boolean((this.deps.game as any)?.course?.currentStageIsPackStage) ||
+      (packBasePath !== null && dbgBasePath === packBasePath);
+    if (RANDO_DEBUG) {
+      console.log('rando: render start:', {
+        stageId,
+        gameSource: activeGameSource,
+        basePath: dbgBasePath,
+        isPack: dbgIsPack,
+      });
+    }
     if (activeGameSource !== GAME_SOURCES.SMB1) {
       const stage = this.deps.game.stage;
-      const stageData = await this.deps.loadRenderStageSmb2(stageId, stage, activeGameSource);
+      let stageData;
+      try {
+        stageData = await this.deps.loadRenderStageSmb2(stageId, stage, activeGameSource, this.deps.game.stageBasePath, dbgIsPack);
+      } catch (renderErr) {
+        if (RANDO_DEBUG) {
+          console.log('rando: render FAILED (smb2):', {
+            stageId,
+            gameSource: activeGameSource,
+            basePath: dbgBasePath,
+            isPack: dbgIsPack,
+            stageFormat: (stage as any)?.format,
+            error: String((renderErr as any)?.message ?? renderErr),
+          });
+        }
+        throw renderErr;
+      }
       if (token !== this.stageLoadToken) {
         return;
       }
       this.deps.destroyRenderer();
-      this.deps.createRenderer(stageData);
+      try {
+        this.deps.createRenderer(stageData);
+      } catch (createErr) {
+        if (RANDO_DEBUG) {
+          console.log('rando: createRenderer FAILED (smb2):', {
+            stageId,
+            gameSource: activeGameSource,
+            basePath: dbgBasePath,
+            isPack: dbgIsPack,
+            error: String((createErr as any)?.message ?? createErr),
+          });
+        }
+        throw createErr;
+      }
       this.deps.prewarmConfettiRenderer();
       (window as typeof window & { smbStageInfo?: { stageId: number; gameSource: GameSource; bgFile: string } }).smbStageInfo = {
         stageId,
@@ -190,7 +233,7 @@ export class StageFlowController {
       return;
     }
 
-    const stageData = await this.deps.loadRenderStage(stageId);
+    const stageData = await this.deps.loadRenderStage(stageId, this.deps.game.stageBasePath);
     if (token !== this.stageLoadToken) {
       return;
     }
