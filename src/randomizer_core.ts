@@ -8,6 +8,7 @@ export interface RandomizerStageEntry {
   rulesetId?: string;
   difficulty?: string;
   gameSource?: string;
+  packStage?: boolean;
 }
 
 export interface RandomizerCourse {
@@ -20,6 +21,7 @@ export interface RandomizerCourse {
   currentStageParserId?: string;
   currentStageRulesetId?: string;
   currentStageGameSource?: string;
+  currentStageIsPackStage?: boolean;
   currentStageName?: string;
   currentFloor?: number;
 }
@@ -73,6 +75,7 @@ function setCourseStage(course: RandomizerCourse, index: number) {
   if (entry.gameSource !== undefined) {
     course.currentStageGameSource = entry.gameSource;
   }
+  course.currentStageIsPackStage = entry.packStage === true;
   if (entry.name !== undefined) {
     course.currentStageName = entry.name;
   }

@@ -171,5 +171,22 @@ export function buildTotalRandomizerPool(): RandomizerPool | null {
     pushFrom(GAME_SOURCES.MB2WS, list, bf, difficulty);
   }
 
+  const activePack = getActivePack();
+  if (activePack) {
+    const packSource = activePack.manifest.gameSource;
+    packStageEntries().forEach((entry, index) => {
+      if (entry == null || typeof entry.id !== 'number') {
+        return;
+      }
+      const key = `pack:${packSource}:${entry.id}`;
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      stageList.push({ ...entry, gameSource: packSource, packStage: true });
+      bonusFlags.push(false);
+    });
+  }
+
   return stageList.length > 0 ? { stageList, bonusFlags } : null;
 }

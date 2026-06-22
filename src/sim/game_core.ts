@@ -4,7 +4,7 @@ import { Mb2wsCourse, type Mb2wsCourseConfig } from '../course_mb2ws.js';
 import { buildRandomizerPool, buildTotalRandomizerPool, RANDOMIZER_PACK_KEY } from '../app/gameplay/randomizer_pool.js';
 import { applyRandomizerPool } from '../randomizer_core.js';
 import { isRandomizerEnabled, getRandomizerGroups, isTotalRandomizerEnabled } from '../randomizer_state.js';
-import { getActivePack, hasPackForGameSource } from '../pack.js';
+import { getActivePack, hasPackForGameSource, getPackStageBasePath } from '../pack.js';
 import { loadGoalTapeAnchorY, loadStageDef, loadStageModelBounds, StageRuntime } from '../stage.js';
 import { Input } from '../input.js';
 import { AudioManager } from '../audio.js';
@@ -2362,9 +2362,18 @@ export class GameCore {
       this.stageRulesetId = (this.course as any).currentStageRulesetId ?? this.stageRulesetId;
       {
         const totalSrc = (this.course as any).currentStageGameSource as GameSource | undefined;
-        if (totalSrc && (STAGE_BASE_PATHS as any)[totalSrc] && totalSrc !== this.gameSource) {
-          this.gameSource = totalSrc;
-          this.stageBasePath = (STAGE_BASE_PATHS as any)[totalSrc];
+        const isPackStage = (this.course as any).currentStageIsPackStage === true;
+        if (totalSrc) {
+          if (isPackStage) {
+            const packBase = getPackStageBasePath(totalSrc);
+            if (packBase) {
+              this.gameSource = totalSrc;
+              this.stageBasePath = packBase;
+            }
+          } else if ((STAGE_BASE_PATHS as any)[totalSrc] && totalSrc !== this.gameSource) {
+            this.gameSource = totalSrc;
+            this.stageBasePath = (STAGE_BASE_PATHS as any)[totalSrc];
+          }
         }
       }
       this.syncRulesetFromStage();
@@ -3815,9 +3824,18 @@ export class GameCore {
     this.stageRulesetId = (this.course as any).currentStageRulesetId ?? this.stageRulesetId;
       {
         const totalSrc = (this.course as any).currentStageGameSource as GameSource | undefined;
-        if (totalSrc && (STAGE_BASE_PATHS as any)[totalSrc] && totalSrc !== this.gameSource) {
-          this.gameSource = totalSrc;
-          this.stageBasePath = (STAGE_BASE_PATHS as any)[totalSrc];
+        const isPackStage = (this.course as any).currentStageIsPackStage === true;
+        if (totalSrc) {
+          if (isPackStage) {
+            const packBase = getPackStageBasePath(totalSrc);
+            if (packBase) {
+              this.gameSource = totalSrc;
+              this.stageBasePath = packBase;
+            }
+          } else if ((STAGE_BASE_PATHS as any)[totalSrc] && totalSrc !== this.gameSource) {
+            this.gameSource = totalSrc;
+            this.stageBasePath = (STAGE_BASE_PATHS as any)[totalSrc];
+          }
         }
       }
     this.syncRulesetFromStage();
