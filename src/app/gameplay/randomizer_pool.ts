@@ -8,8 +8,9 @@ import {
   getMb2wsChallengeStageEntries,
   listMb2wsChallengeDifficulties,
 } from '../../course_mb2ws.js';
-import { GAME_SOURCES, type GameSource } from '../../shared/constants/index.js';
+import { GAME_SOURCES, STAGE_BASE_PATHS, type GameSource } from '../../shared/constants/index.js';
 import { getActivePack, getPackStageRules, getPackStageName, packStageHasModel, packStageHasStagedef, hasPackForGameSource } from '../../pack.js';
+import { setVerifiedInstalledStages, getVerifiedInstalledStages, RANDO_DEBUG } from '../../randomizer_state.js';
 import { STAGE_INFO_MAP } from '../../noclip/SuperMonkeyBall/StageInfo.js';
 import { getSmb2StageInfo, getMb2wsStageInfo } from '../../smb2_render.js';
 
@@ -72,15 +73,54 @@ export function listRandomizerGroups(gameSource: GameSource): RandomizerGroup[] 
   return [];
 }
 
+function packDeclaredPlayableIds(): Set<number> | null {
+  const pack = getActivePack();
+  if (!pack) {
+    return null;
+  }
+  const ids = new Set<number>();
+  const order = pack.manifest?.courses?.challenge?.order;
+  if (order && typeof order === 'object') {
+    for (const key of Object.keys(order)) {
+      const list = (order as Record<string, Array<number | { id?: number }>>)[key];
+      if (!Array.isArray(list)) {
+        continue;
+      }
+      for (const entry of list) {
+        const id = typeof entry === 'number' ? entry : entry?.id;
+        if (typeof id === 'number' && Number.isFinite(id)) {
+          ids.add(id);
+        }
+      }
+    }
+  }
+  if (ids.size > 0) {
+    return ids;
+  }
+  const stageNames = pack.manifest?.content?.stageNames;
+  if (stageNames && Object.keys(stageNames).length > 0) {
+    for (const key of Object.keys(stageNames)) {
+      const id = Number(key);
+      if (Number.isFinite(id)) {
+        ids.add(id);
+      }
+    }
+    return ids;
+  }
+  return null;
+}
+
 function packStageEntries(): any[] {
   const pack = getActivePack();
   const ids: number[] = pack?.manifest?.content?.stages ?? [];
   const packSource: GameSource = (pack?.manifest?.gameSource as GameSource) ?? GAME_SOURCES.SMB1;
+  const declaredPlayable = packDeclaredPlayableIds();
   return ids
     .filter((id) =>
       packStageHasModel(id) &&
       packStageHasStagedef(id) &&
-      stageLoadableForSource(packSource, id),
+      stageLoadableForSource(packSource, id) &&
+      (declaredPlayable === null || declaredPlayable.has(id)),
     )
     .map((id) => {
       const rules = getPackStageRules(id);
@@ -89,9 +129,202 @@ function packStageEntries(): any[] {
         id,
         parserId: rules?.parserId,
         rulesetId: rules?.rulesetId,
+        packStage: true,
         ...(name ? { name } : {}),
       };
     });
+}
+
+function getInstalledStageIdSet(source: GameSource): Set<number> | null {
+  return getVerifiedInstalledStages(source);
+}
+
+async function baseFileExists(url: string): Promise<boolean> {
+  try {
+    const head = await fetch(url, { method: 'HEAD' });
+    if (head.ok) {
+      return true;
+    }
+    if (head.status === 405 || head.status === 501) {
+      const ranged = await fetch(url, { headers: { Range: 'bytes=0-0' } });
+      return ranged.ok;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function baseCandidateIds(source: GameSource): number[] {
+  const ids = new Set<number>();
+  const add = (entries: any[]) => {
+    for (const entry of entries) {
+      if (entry && typeof entry.id === 'number' && stageLoadableForSource(source, entry.id)) {
+        ids.add(entry.id);
+      }
+    }
+  };
+  if (source === GAME_SOURCES.SMB1) {
+    for (const group of SMB1_DIFFICULTIES) {
+      add(getStageListForDifficulty(group.value));
+    }
+  } else if (source === GAME_SOURCES.SMB2) {
+    for (const difficulty of listSmb2ChallengeDifficulties()) {
+      add(getSmb2ChallengeStageEntries(difficulty).stageList);
+    }
+  } else if (source === GAME_SOURCES.MB2WS) {
+    for (const difficulty of listMb2wsChallengeDifficulties()) {
+      add(getMb2wsChallengeStageEntries(difficulty).stageList);
+    }
+  }
+  return [...ids];
+}
+
+async function verifySourceStages(source: GameSource): Promise<void> {
+  const base = (STAGE_BASE_PATHS as Record<string, string>)[source];
+  if (!base) {
+    setVerifiedInstalledStages(source, []);
+    return;
+  }
+  const candidates = baseCandidateIds(source);
+  if (candidates.length === 0) {
+    setVerifiedInstalledStages(source, []);
+    return;
+  }
+  const sampleSize = Math.min(8, candidates.length);
+  let anyPresent = false;
+  for (let i = 0; i < sampleSize; i += 1) {
+    const idStr = String(candidates[i]).padStart(3, '0');
+    if (await baseFileExists(`${base}/st${idStr}/STAGE${idStr}.lz`)) {
+      anyPresent = true;
+      break;
+    }
+  }
+  if (!anyPresent) {
+    setVerifiedInstalledStages(source, []);
+    if (RANDO_DEBUG) {
+      console.log(`rando: verified ${source}: content folder appears absent, 0 stages`);
+    }
+    return;
+  }
+  const available: number[] = [];
+  const concurrency = Math.min(12, candidates.length);
+  let cursor = 0;
+  const runWorker = async (): Promise<void> => {
+    for (;;) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= candidates.length) {
+        return;
+      }
+      const id = candidates[index];
+      const idStr = String(id).padStart(3, '0');
+      const hasStagedef = await baseFileExists(`${base}/st${idStr}/STAGE${idStr}.lz`);
+      if (!hasStagedef) {
+        continue;
+      }
+      const hasModel = await baseFileExists(`${base}/st${idStr}/st${idStr}.gma`);
+      if (hasModel) {
+        available.push(id);
+      }
+    }
+  };
+  const workers: Array<Promise<void>> = [];
+  for (let w = 0; w < concurrency; w += 1) {
+    workers.push(runWorker());
+  }
+  await Promise.all(workers);
+  setVerifiedInstalledStages(source, available);
+  if (RANDO_DEBUG) {
+    console.log(`rando: verified ${source}: ${available.length}/${candidates.length} present`, available.slice(0, 12));
+  }
+}
+
+let verificationPromise: Promise<void> | null = null;
+
+export function ensureStagesVerified(): Promise<void> {
+  if (!verificationPromise) {
+    verificationPromise = Promise.all([
+      verifySourceStages(GAME_SOURCES.SMB1),
+      verifySourceStages(GAME_SOURCES.SMB2),
+      verifySourceStages(GAME_SOURCES.MB2WS),
+    ]).then(() => undefined);
+  }
+  return verificationPromise;
+}
+
+let packVerifiedIds: Set<number> | null = null;
+let packVerifiedKey: string | null = null;
+let packVerificationPromise: Promise<void> | null = null;
+
+function activePackIdentity(pack: ReturnType<typeof getActivePack>): string {
+  return `${pack?.manifest?.gameSource ?? ''}|${(pack as any)?.basePath ?? ''}`;
+}
+
+async function verifyPackStages(pack: NonNullable<ReturnType<typeof getActivePack>>): Promise<void> {
+  if (pack.provider.has) {
+    packVerifiedIds = null;
+    return;
+  }
+  const ids: number[] = pack.manifest?.content?.stages ?? [];
+  if (!Array.isArray(ids) || ids.length === 0) {
+    packVerifiedIds = new Set<number>();
+    return;
+  }
+  const base = String((pack as any).basePath ?? '').replace(/\/+$/, '');
+  const present: number[] = [];
+  const concurrency = Math.min(12, ids.length);
+  let cursor = 0;
+  const runWorker = async (): Promise<void> => {
+    for (;;) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= ids.length) {
+        return;
+      }
+      const id = ids[index];
+      if (typeof id !== 'number' || !Number.isFinite(id)) {
+        continue;
+      }
+      const idStr = String(id).padStart(3, '0');
+      const hasStagedef = await baseFileExists(`${base}/st${idStr}/STAGE${idStr}.lz`);
+      if (!hasStagedef) {
+        continue;
+      }
+      const hasModel = await baseFileExists(`${base}/st${idStr}/st${idStr}.gma`);
+      if (hasModel) {
+        present.push(id);
+      }
+    }
+  };
+  const workers: Array<Promise<void>> = [];
+  for (let w = 0; w < concurrency; w += 1) {
+    workers.push(runWorker());
+  }
+  await Promise.all(workers);
+  packVerifiedIds = new Set(present);
+}
+
+export function ensurePackStagesVerified(): Promise<void> {
+  const pack = getActivePack();
+  if (!pack) {
+    packVerifiedIds = null;
+    packVerifiedKey = null;
+    packVerificationPromise = null;
+    return Promise.resolve();
+  }
+  const identity = activePackIdentity(pack);
+  if (packVerifiedKey === identity && packVerificationPromise) {
+    return packVerificationPromise;
+  }
+  packVerifiedKey = identity;
+  packVerifiedIds = null;
+  packVerificationPromise = verifyPackStages(pack);
+  return packVerificationPromise;
+}
+
+function getVerifiedPackStageSet(): Set<number> | null {
+  return packVerifiedIds;
 }
 
 export function buildRandomizerPool(gameSource: GameSource, keys: string[]): RandomizerPool | null {
@@ -101,31 +334,39 @@ export function buildRandomizerPool(gameSource: GameSource, keys: string[]): Ran
   const seen = new Set<number>();
   const stageList: any[] = [];
   const bonusFlags: boolean[] = [];
+  const installed = getInstalledStageIdSet(gameSource);
 
-  const pushEntries = (entries: any[], bonus: boolean[] | null, difficultyTag: string | null) => {
+  const pushEntries = (entries: any[], bonus: boolean[] | null, difficultyTag: string | null, gateBySource: boolean) => {
+    const packVerified = gateBySource ? null : getVerifiedPackStageSet();
     entries.forEach((entry, index) => {
       if (entry == null || typeof entry.id !== 'number' || seen.has(entry.id)) {
         return;
       }
+      if (gateBySource && installed && !installed.has(entry.id)) {
+        return;
+      }
+      if (!gateBySource && packVerified && !packVerified.has(entry.id)) {
+        return;
+      }
       seen.add(entry.id);
-      stageList.push(difficultyTag ? { ...entry, difficulty: difficultyTag } : entry);
+      stageList.push({ ...entry, gameSource, ...(difficultyTag ? { difficulty: difficultyTag } : {}) });
       bonusFlags.push(Array.isArray(bonus) ? bonus[index] === true : false);
     });
   };
 
   for (const key of keys) {
     if (key === RANDOMIZER_PACK_KEY) {
-      pushEntries(packStageEntries(), null, null);
+      pushEntries(packStageEntries(), null, null, false);
       continue;
     }
     if (gameSource === GAME_SOURCES.SMB1) {
-      pushEntries(getStageListForDifficulty(key), null, key);
+      pushEntries(getStageListForDifficulty(key), null, key, true);
     } else if (gameSource === GAME_SOURCES.SMB2) {
       const { stageList: list, bonusFlags: bf } = getSmb2ChallengeStageEntries(key);
-      pushEntries(list, bf, key);
+      pushEntries(list, bf, key, true);
     } else if (gameSource === GAME_SOURCES.MB2WS) {
       const { stageList: list, bonusFlags: bf } = getMb2wsChallengeStageEntries(key);
-      pushEntries(list, bf, key);
+      pushEntries(list, bf, key, true);
     }
   }
 
@@ -138,8 +379,12 @@ export function buildTotalRandomizerPool(): RandomizerPool | null {
   const bonusFlags: boolean[] = [];
 
   const pushFrom = (source: GameSource, entries: any[], bonus: boolean[] | null, difficultyTag: string | null) => {
+    const installed = getInstalledStageIdSet(source);
     entries.forEach((entry, index) => {
       if (entry == null || typeof entry.id !== 'number') {
+        return;
+      }
+      if (installed && !installed.has(entry.id)) {
         return;
       }
       if (!stageLoadableForSource(source, entry.id)) {
@@ -172,10 +417,34 @@ export function buildTotalRandomizerPool(): RandomizerPool | null {
   }
 
   const activePack = getActivePack();
+  if (RANDO_DEBUG) {
+    if (!activePack) {
+      console.log('rando: pack append: no active pack (select the pack so its stages enter the pool)');
+    } else {
+      const declared: number[] = activePack.manifest?.content?.stages ?? [];
+      const withModel = declared.filter((id) => packStageHasModel(id));
+      const withBoth = withModel.filter((id) => packStageHasStagedef(id));
+      console.log('rando: pack append:', {
+        name: activePack.manifest?.name,
+        source: activePack.manifest?.gameSource,
+        hasProvider: typeof (activePack as any).provider?.fetch === 'function',
+        providerHas: typeof (activePack as any).provider?.has === 'function',
+        declared: declared.length,
+        withModel: withModel.length,
+        withModelAndStagedef: withBoth.length,
+        entries: packStageEntries().length,
+        verified: getVerifiedPackStageSet()?.size ?? null,
+      });
+    }
+  }
   if (activePack) {
     const packSource = activePack.manifest.gameSource;
+    const packVerified = getVerifiedPackStageSet();
     packStageEntries().forEach((entry, index) => {
       if (entry == null || typeof entry.id !== 'number') {
+        return;
+      }
+      if (packVerified && !packVerified.has(entry.id)) {
         return;
       }
       const key = `pack:${packSource}:${entry.id}`;
@@ -186,6 +455,15 @@ export function buildTotalRandomizerPool(): RandomizerPool | null {
       stageList.push({ ...entry, gameSource: packSource, packStage: true });
       bonusFlags.push(false);
     });
+  }
+
+  if (RANDO_DEBUG) {
+    const bySource: Record<string, number> = {};
+    for (const entry of stageList) {
+      const dbgKey = `${entry.packStage ? 'pack:' : ''}${entry.gameSource}`;
+      bySource[dbgKey] = (bySource[dbgKey] ?? 0) + 1;
+    }
+    console.log('rando: total pool built:', stageList.length, bySource);
   }
 
   return stageList.length > 0 ? { stageList, bonusFlags } : null;
