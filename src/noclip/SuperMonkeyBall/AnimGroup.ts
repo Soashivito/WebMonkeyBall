@@ -206,7 +206,9 @@ export class AnimGroup {
 
         this.bananas = this.agData.bananas.map((ban) => new Banana(modelCache, stageData, ban));
         this.goals = this.agData.goals.map((goal) => new Goal(modelCache, goal, goalTimerDigits));
-        this.bumpers = this.agData.bumpers.map((bumper) => new Bumper(modelCache, bumper));
+        this.bumpers = modelCache.getBumperModel()
+            ? this.agData.bumpers.map((bumper) => new Bumper(modelCache, bumper))
+            : [];
         this.wormholes = this.agData.wormholes.map((wormhole) => new Wormhole(modelCache, wormhole));
         this.jamabarModel = modelCache.getJamabarModel();
 
