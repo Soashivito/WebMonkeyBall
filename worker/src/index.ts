@@ -25,6 +25,10 @@ type RoomMeta = {
   stageLabel?: string;
   stageId?: number;
   roomName?: string;
+  packId?: string;
+  packName?: string;
+  packIds?: string[];
+  packNames?: string[];
 };
 
 type PlayerRecord = {
@@ -495,6 +499,34 @@ function sanitizeMeta(input?: Partial<RoomMeta>): RoomMeta {
   const stageLabel = stageLabelRaw.trim() ? stageLabelRaw.trim() : undefined;
   const roomName = roomNameRaw.trim() ? roomNameRaw.trim() : undefined;
   const stageId = Number.isFinite(input?.stageId) ? Number(input?.stageId) : undefined;
+  const sanitizePackId = (value: unknown): string | undefined => {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const trimmed = value.trim().slice(0, 96);
+    return trimmed ? trimmed : undefined;
+  };
+  const sanitizePackName = (value: unknown): string | undefined => {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const trimmed = value.trim().slice(0, 64);
+    return trimmed ? trimmed : undefined;
+  };
+  const packId = sanitizePackId(input?.packId);
+  const packName = sanitizePackName(input?.packName);
+  const packIdsRaw = Array.isArray(input?.packIds) ? input!.packIds! : [];
+  const packNamesRaw = Array.isArray(input?.packNames) ? input!.packNames! : [];
+  const packIds: string[] = [];
+  const packNames: string[] = [];
+  for (let i = 0; i < Math.min(packIdsRaw.length, 32); i += 1) {
+    const id = sanitizePackId(packIdsRaw[i]);
+    if (!id) {
+      continue;
+    }
+    packIds.push(id);
+    packNames.push(sanitizePackName(packNamesRaw[i]) ?? id);
+  }
   const gameModeOptions: Record<string, string | number | boolean> = {};
   if (input?.gameModeOptions && typeof input.gameModeOptions === "object" && !Array.isArray(input.gameModeOptions)) {
     for (const [keyRaw, valueRaw] of Object.entries(input.gameModeOptions)) {
@@ -528,6 +560,10 @@ function sanitizeMeta(input?: Partial<RoomMeta>): RoomMeta {
     stageLabel,
     stageId,
     roomName,
+    packId,
+    packName,
+    packIds: packIds.length > 0 ? packIds : undefined,
+    packNames: packNames.length > 0 ? packNames : undefined,
   };
 }
 

@@ -26,6 +26,8 @@ export type RoomMeta = {
   roomName?: string;
   packId?: string;
   packName?: string;
+  packIds?: string[];
+  packNames?: string[];
 };
 
 export type RoomInfo = {

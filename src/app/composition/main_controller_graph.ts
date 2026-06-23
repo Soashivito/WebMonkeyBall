@@ -32,6 +32,7 @@ export function createMainControllerGraph(args: any) {
     normalizeMultiplayerGameMode,
     profileFallbackForPlayer,
     packSelection,
+    getMissingRoomPacks,
     pendingSpawnStageSeq,
     handleHostDisconnect,
     leaderboardsClient,
@@ -216,6 +217,7 @@ const lobbyBrowser = new LobbyBrowserController({
       state.lobbySignalReconnectFn = null;
     }
   },
+  getMissingRoomPacks: (meta) => getMissingRoomPacks(meta),
 });
 
 const peerSession = new PeerSessionController({

@@ -38,13 +38,24 @@ type LobbyBrowserDeps = {
   resetNetplayConnections: () => void;
   clearLobbySignalRetry: () => void;
   setLobbySignalShouldReconnect: (enabled: boolean) => void;
+  getMissingRoomPacks: (meta: RoomInfo['meta']) => Array<{ id: string; name: string }>;
 };
 
 export class LobbyBrowserController {
   private readonly deps: LobbyBrowserDeps;
+  private lastRooms: RoomInfo[] = [];
 
   constructor(deps: LobbyBrowserDeps) {
     this.deps = deps;
+  }
+
+  private findRoomById(roomId: string): RoomInfo | null {
+    return this.lastRooms.find((room) => room.roomId === roomId) ?? null;
+  }
+
+  private formatMissingPackStatus(missing: Array<{ id: string; name: string }>): string {
+    const names = missing.map((entry) => entry.name).join(', ');
+    return `Missing pack${missing.length > 1 ? 's' : ''}: ${names}. Load the .zip once (Singleplayer > Practice), then join.`;
   }
 
   private getErrorCode(err: unknown): string {
@@ -114,6 +125,7 @@ export class LobbyBrowserController {
     }
     try {
       const rooms = await lobbyClient.listRooms();
+      this.lastRooms = rooms;
       lobbyList.innerHTML = '';
       const totalPlayers = rooms.reduce((sum, room) => sum + (room.playerCount ?? 0), 0);
       if (multiplayerOnlineCount) {
@@ -133,8 +145,7 @@ export class LobbyBrowserController {
         const courseLabel = room.meta?.courseLabel ?? room.courseId ?? 'Unknown';
         const stageLabel = room.meta?.stageLabel ? ` • ${room.meta.stageLabel}` : '';
         const modeLabel = ` • ${this.deps.formatMultiplayerGameModeLabel(this.deps.getRoomGameMode(room))}`;
-        const packLabel = room.meta?.packName ? ` • Pack: ${room.meta.packName}` : '';
-        subtitle.textContent = `${sourceLabel} • ${courseLabel}${stageLabel}${modeLabel}${packLabel}`;
+        subtitle.textContent = `${sourceLabel} • ${courseLabel}${stageLabel}${modeLabel}`;
         const meta = document.createElement('div');
         meta.className = 'lobby-item-meta';
         const status = room.meta?.status === 'in_game' ? 'In Game' : 'Waiting';
@@ -144,11 +155,25 @@ export class LobbyBrowserController {
         const lockLabel = locked ? ' • Locked' : '';
         meta.textContent = `${status} • ${playerCount}/${maxPlayers} players${lockLabel}`;
         info.append(title, subtitle, meta);
+        const packNames = room.meta?.packNames ?? (room.meta?.packName ? [room.meta.packName] : []);
+        if (packNames.length > 0) {
+          const packRow = document.createElement('div');
+          packRow.className = 'lobby-item-packs';
+          packRow.textContent = `${packNames.length > 1 ? 'Packs' : 'Pack'}: ${packNames.join(', ')}`;
+          info.append(packRow);
+        }
+        const missingPacks = this.deps.getMissingRoomPacks(room.meta);
+        if (missingPacks.length > 0) {
+          const missRow = document.createElement('div');
+          missRow.className = 'lobby-item-missing';
+          missRow.textContent = `Missing: ${missingPacks.map((entry) => entry.name).join(', ')}`;
+          info.append(missRow);
+        }
         const join = document.createElement('button');
         join.className = 'ghost compact';
         join.type = 'button';
         join.textContent = 'Join';
-        if (playerCount >= maxPlayers || locked) {
+        if (playerCount >= maxPlayers || locked || missingPacks.length > 0) {
           join.disabled = true;
         }
         join.addEventListener('click', async () => {
@@ -216,6 +241,12 @@ export class LobbyBrowserController {
       lobbyStatus.textContent = 'Lobby: leave current room first';
       return;
     }
+    const roomToJoin = this.findRoomById(roomId);
+    const missing = this.deps.getMissingRoomPacks(roomToJoin?.meta);
+    if (missing.length > 0) {
+      lobbyStatus.textContent = this.formatMissingPackStatus(missing);
+      return;
+    }
     lobbyStatus.textContent = 'Lobby: joining...';
     let result: { room: LobbyRoom; playerId: number; playerToken: string };
     try {
@@ -267,6 +298,12 @@ export class LobbyBrowserController {
     } catch (err) {
       console.error(err);
       this.setJoinErrorStatus(lobbyStatus, err);
+      return;
+    }
+    const missing = this.deps.getMissingRoomPacks(result.room.meta);
+    if (missing.length > 0) {
+      await this.cleanupFailedClientJoin(result.room.roomId, result.playerId, result.playerToken);
+      lobbyStatus.textContent = this.formatMissingPackStatus(missing);
       return;
     }
     this.deps.destroySingleplayerForNetplay();

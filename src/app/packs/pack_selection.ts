@@ -7,6 +7,8 @@ import {
   setPackEnabled,
   packIdentity,
   normalizeIdentity,
+  registerPackInRegistry,
+  unregisterPackFromRegistry,
 } from '../../pack.js';
 import type { LoadedPack } from '../../pack.js';
 
@@ -42,6 +44,14 @@ export class PackSelectionController {
   resolveSelectedGameSource() {
     const selection = (this.gameSourceSelect?.value as GameSourceSelection) ?? GAME_SOURCES.SMB1;
     if (selection.startsWith('pack:')) {
+      const key = selection.slice('pack:'.length);
+      const loaded = this.loadedPacks.get(key) ?? null;
+      const active = getActivePack();
+      if (loaded && active !== loaded) {
+        this.activePackKey = key;
+        setActivePack(loaded);
+        setPackEnabled(true);
+      }
       const pack = getActivePack();
       if (pack) {
         return { selection, gameSource: pack.manifest.gameSource };
@@ -101,9 +111,38 @@ export class PackSelectionController {
     }
   }
 
+  getLoadedPackList(): { identity: string; name: string; gameSource: GameSource }[] {
+    return Array.from(this.loadedPacks.entries()).map(([key, entry]) => ({
+      identity: key,
+      name: entry.manifest.name ?? 'Custom pack',
+      gameSource: entry.manifest.gameSource,
+    }));
+  }
+
+  removePack(identity: string): void {
+    const target = normalizeIdentity(identity);
+    for (const key of Array.from(this.loadedPacks.keys())) {
+      if (normalizeIdentity(key) !== target) {
+        continue;
+      }
+      this.loadedPacks.delete(key);
+      unregisterPackFromRegistry(key);
+      if (this.activePackKey === key) {
+        this.activePackKey = null;
+        setActivePack(null);
+        setPackEnabled(false);
+        if (this.gameSourceSelect && this.gameSourceSelect.value === `pack:${key}`) {
+          this.gameSourceSelect.value = GAME_SOURCES.SMB1;
+        }
+      }
+    }
+    this.refreshUi();
+  }
+
   registerLoadedPack(pack: LoadedPack) {
     const key = packIdentity(pack);
     this.loadedPacks.set(key, pack);
+    registerPackInRegistry(pack);
     this.activePackKey = key;
     setActivePack(pack);
     setPackEnabled(true);
@@ -111,6 +150,7 @@ export class PackSelectionController {
 
   registerLoadedPackQuiet(pack: LoadedPack) {
     this.loadedPacks.set(packIdentity(pack), pack);
+    registerPackInRegistry(pack);
   }
 
   hasPackIdentity(identity: string): boolean {
