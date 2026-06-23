@@ -1,5 +1,5 @@
 
-import { isRandomizerEnabled, isTotalRandomizerEnabled } from './randomizer_state.js';
+import { isRandomizerEnabled, isTotalRandomizerEnabled, isStageRuntimeUnavailable } from './randomizer_state.js';
 
 export interface RandomizerStageEntry {
   id: number;
@@ -38,6 +38,13 @@ export function courseIndexIsBonus(course: RandomizerCourse, index: number): boo
   return typeof id === 'number' && isBonusStageId(id);
 }
 
+function entryStageUnavailable(entry: RandomizerStageEntry | undefined): boolean {
+  if (!entry || typeof entry.id !== 'number' || typeof entry.gameSource !== 'string') {
+    return false;
+  }
+  return isStageRuntimeUnavailable(entry.gameSource, entry.id, entry.packStage === true);
+}
+
 export function pickRandomizerIndex(course: RandomizerCourse, currentIndex: number): number | null {
   if (!course.__randomizerVisited) {
     course.__randomizerVisited = new Set<number>();
@@ -48,6 +55,9 @@ export function pickRandomizerIndex(course: RandomizerCourse, currentIndex: numb
     if (course.__randomizerVisited.has(i) || courseIndexIsBonus(course, i)) {
       continue;
     }
+    if (entryStageUnavailable(course.stageList[i])) {
+      continue;
+    }
     remaining.push(i);
   }
   if (remaining.length === 0) {
@@ -56,6 +66,16 @@ export function pickRandomizerIndex(course: RandomizerCourse, currentIndex: numb
   const pick = remaining[Math.floor(Math.random() * remaining.length)];
   course.__randomizerVisited.add(pick);
   return pick;
+}
+
+export function markCurrentRandomizerStageVisited(course: RandomizerCourse) {
+  const index = typeof course.stageIndex === 'number' ? course.stageIndex : course.currentIndex;
+  if (typeof index === 'number' && index >= 0) {
+    if (!course.__randomizerVisited) {
+      course.__randomizerVisited = new Set<number>();
+    }
+    course.__randomizerVisited.add(index);
+  }
 }
 
 function setCourseStage(course: RandomizerCourse, index: number) {

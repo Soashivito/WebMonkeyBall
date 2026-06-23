@@ -1,3 +1,5 @@
+import { ensureStagesVerified, ensurePackStagesVerified } from './gameplay/randomizer_pool.js';
+
 type AppBootstrapOptions = {
   setOverlayVisible: (visible: boolean) => void;
   startButton: HTMLButtonElement;
@@ -12,7 +14,9 @@ export function runAppBootstrap(options: AppBootstrapOptions) {
   options.startButton.disabled = false;
   options.refreshPackUi();
   options.syncPackEnabled();
+  void ensureStagesVerified();
   void options.initPackFromQuery().finally(() => {
     options.onPackReady();
+    void ensurePackStagesVerified();
   });
 }

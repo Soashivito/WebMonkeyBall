@@ -435,7 +435,7 @@ export function runMainApp() {
           }
           const file = new File([rec.bytes], `${rec.name || 'pack'}.zip`, { type: 'application/zip' });
           const pack = await loadPackFromZipFile(file);
-          packSelection.registerLoadedPackQuiet(pack);
+          packSelection.registerLoadedPack(pack);
         } catch (err) {
           console.warn('Pack store: failed to restore a pack.', err);
         }
@@ -492,12 +492,12 @@ export function runMainApp() {
     },
   });
   
-  async function loadRenderStage(stageId: number): Promise<StageData> {
-    return stageLoader.loadSmb1(stageId);
+  async function loadRenderStage(stageId: number, basePath?: string): Promise<StageData> {
+    return stageLoader.loadSmb1(stageId, basePath);
   }
   
-  async function loadRenderStageSmb2(stageId: number, stage: any, gameSource: GameSource): Promise<StageData> {
-    return stageLoader.loadSmb2Like(stageId, stage, gameSource);
+  async function loadRenderStageSmb2(stageId: number, stage: any, gameSource: GameSource, basePath?: string, isPack?: boolean): Promise<StageData> {
+    return stageLoader.loadSmb2Like(stageId, stage, gameSource, basePath, isPack === true);
   }
   
   let renderer: Renderer | null = null;

@@ -1,11 +1,13 @@
 import { Course } from '../course.js';
 import { Smb2Course, type Smb2CourseConfig } from '../course_smb2.js';
 import { Mb2wsCourse, type Mb2wsCourseConfig } from '../course_mb2ws.js';
-import { buildRandomizerPool, buildTotalRandomizerPool, RANDOMIZER_PACK_KEY } from '../app/gameplay/randomizer_pool.js';
-import { applyRandomizerPool } from '../randomizer_core.js';
-import { isRandomizerEnabled, getRandomizerGroups, isTotalRandomizerEnabled } from '../randomizer_state.js';
+import { buildRandomizerPool, buildTotalRandomizerPool, ensureStagesVerified, ensurePackStagesVerified, RANDOMIZER_PACK_KEY } from '../app/gameplay/randomizer_pool.js';
+import { applyRandomizerPool, randomizerAdvanceCourse, markCurrentRandomizerStageVisited } from '../randomizer_core.js';
+import { isRandomizerEnabled, getRandomizerGroups, isTotalRandomizerEnabled, markStageRuntimeUnavailable, RANDO_DEBUG } from '../randomizer_state.js';
 import { getActivePack, hasPackForGameSource, getPackStageBasePath } from '../pack.js';
 import { loadGoalTapeAnchorY, loadStageDef, loadStageModelBounds, StageRuntime } from '../stage.js';
+import { SMB1_PARSER_ID } from '../stage/parse/parsers/smb1.js';
+import { SMB2_PARSER_ID } from '../stage/parse/parsers/smb2.js';
 import { Input } from '../input.js';
 import { AudioManager } from '../audio.js';
 import {
@@ -307,6 +309,8 @@ export class GameCore {
   public onCourseComplete?: (info: { flags: number; goalType: string | null; timerCurr: number; u_currStageId: number }) => void;
   public stageBasePath: string;
   public gameSource: GameSource;
+  private lastStageLoadFailed = false;
+  private randomizerRecoveryFailures = 0;
   public stageParserId: string | null;
   public stageRulesetId: string | null;
   public audio: AudioManager | null;
@@ -2332,6 +2336,12 @@ export class GameCore {
 
       const totalOn = isTotalRandomizerEnabled();
       if (isRandomizerEnabled() || totalOn) {
+        try {
+          await ensureStagesVerified();
+          await ensurePackStagesVerified();
+        } catch (verifyErr) {
+          console.error(verifyErr);
+        }
         if (totalOn) {
           const pool = buildTotalRandomizerPool();
           if (pool) {
@@ -2360,30 +2370,94 @@ export class GameCore {
     if (this.course) {
       this.stageParserId = (this.course as any).currentStageParserId ?? this.stageParserId;
       this.stageRulesetId = (this.course as any).currentStageRulesetId ?? this.stageRulesetId;
-      {
-        const totalSrc = (this.course as any).currentStageGameSource as GameSource | undefined;
-        const isPackStage = (this.course as any).currentStageIsPackStage === true;
-        if (totalSrc) {
-          if (isPackStage) {
-            const packBase = getPackStageBasePath(totalSrc);
-            if (packBase) {
-              this.gameSource = totalSrc;
-              this.stageBasePath = packBase;
-            }
-          } else if ((STAGE_BASE_PATHS as any)[totalSrc] && totalSrc !== this.gameSource) {
-            this.gameSource = totalSrc;
-            this.stageBasePath = (STAGE_BASE_PATHS as any)[totalSrc];
-          }
-        }
-      }
+      this.applyRandomizerStageSource();
       this.syncRulesetFromStage();
     }
 
     this.score = 0;
     this.lives = DEFAULT_LIVES;
-    await this.loadStage(this.course.currentStageId);
+    this.randomizerRecoveryFailures = 0;
+    await this.loadRandomizerStage(this.course.currentStageId);
     this.paused = false;
     this.onReadyToResume?.();
+  }
+
+  private applyRandomizerStageSource() {
+    const totalSrc = (this.course as any)?.currentStageGameSource as GameSource | undefined;
+    if (!totalSrc) {
+      return;
+    }
+    const isPackStage = (this.course as any).currentStageIsPackStage === true;
+    if (isPackStage) {
+      let packBase: string | null | undefined = getPackStageBasePath(totalSrc);
+      if (packBase == null) {
+        const pack = getActivePack();
+        if (pack && pack.manifest.gameSource === totalSrc) {
+          packBase = pack.basePath;
+        }
+      }
+      if (packBase != null) {
+        this.gameSource = totalSrc;
+        this.stageBasePath = packBase;
+      }
+    } else {
+      const base = (STAGE_BASE_PATHS as any)[totalSrc];
+      if (base) {
+        this.gameSource = totalSrc;
+        this.stageBasePath = base;
+      }
+    }
+    this.stageParserId = totalSrc === GAME_SOURCES.SMB1 ? SMB1_PARSER_ID : SMB2_PARSER_ID;
+    this.stageRulesetId = totalSrc === GAME_SOURCES.SMB1 ? 'smb1' : 'smb2';
+    this.ruleset = getRulesetById(this.stageRulesetId);
+    if (RANDO_DEBUG) {
+      console.log('rando: source switch:', {
+        id: (this.course as any)?.currentStageId,
+        curSrc: totalSrc,
+        gameSource: this.gameSource,
+        basePath: this.stageBasePath,
+        parserId: this.stageParserId,
+      });
+    }
+  }
+
+  private async loadRandomizerStage(stageId: number) {
+    await this.loadStage(stageId);
+    if (!this.lastStageLoadFailed) {
+      this.randomizerRecoveryFailures = 0;
+      return;
+    }
+    if (!(isRandomizerEnabled() || isTotalRandomizerEnabled())) {
+      return;
+    }
+    if (this.session.isMultiplayer(this)) {
+      return;
+    }
+    const maxRecovery = Math.max(1, ((this.course as any)?.stageList?.length ?? 0) + 1);
+    while (this.lastStageLoadFailed && this.randomizerRecoveryFailures < maxRecovery) {
+      this.randomizerRecoveryFailures += 1;
+      const failedSource = (this.course as any)?.currentStageGameSource as string | undefined;
+      const failedIsPack = (this.course as any)?.currentStageIsPackStage === true;
+      const failedStageId = (this.course as any)?.currentStageId as number | undefined;
+      if (typeof failedStageId === 'number' && failedSource) {
+        markStageRuntimeUnavailable(failedSource, failedStageId, failedIsPack);
+      }
+      markCurrentRandomizerStageVisited(this.course as any);
+      const advanced = randomizerAdvanceCourse(this.course as any);
+      if (!advanced) {
+        this.statusText = 'No installed stages left to randomize.';
+        this.updateHud();
+        return;
+      }
+      this.stageParserId = (this.course as any).currentStageParserId ?? this.stageParserId;
+      this.stageRulesetId = (this.course as any).currentStageRulesetId ?? this.stageRulesetId;
+      this.applyRandomizerStageSource();
+      this.syncRulesetFromStage();
+      await this.loadStage((this.course as any).currentStageId);
+    }
+    if (!this.lastStageLoadFailed) {
+      this.randomizerRecoveryFailures = 0;
+    }
   }
 
   pause() {
@@ -3171,6 +3245,13 @@ export class GameCore {
   }
 
   async loadStage(stageId: number) {
+    if (
+      (isRandomizerEnabled() || isTotalRandomizerEnabled()) &&
+      this.course &&
+      (this.course as any).currentStageId === stageId
+    ) {
+      this.applyRandomizerStageSource();
+    }
     const loadToken = ++this.loadToken;
     const isRestart = this.stage?.stageId === stageId;
     this.activeResultReplay = null;
@@ -3189,6 +3270,16 @@ export class GameCore {
     this.onStageLoadStart?.(stageId);
 
     try {
+      if (RANDO_DEBUG) {
+        console.log('rando: loadStage:', {
+          id: stageId,
+          gameSource: this.gameSource,
+          basePath: this.stageBasePath,
+          curSrc: (this.course as any)?.currentStageGameSource,
+          isPack: (this.course as any)?.currentStageIsPackStage,
+          path: `${this.stageBasePath}/st${String(stageId).padStart(3, '0')}/STAGE${String(stageId).padStart(3, '0')}.lz`,
+        });
+      }
       const stage = await loadStageDef(stageId, this.stageBasePath, this.gameSource, this.stageParserId);
       if (loadToken !== this.loadToken) {
         return;
@@ -3299,9 +3390,18 @@ export class GameCore {
       void this.audio?.playMusicForStage(stageId, this.gameSource);
       this.statusText = '';
       this.updateHud();
+      this.lastStageLoadFailed = false;
       this.onStageLoaded?.(stageId);
       this.emitSessionEvent('stage_loaded', { stageId });
     } catch (err) {
+      this.lastStageLoadFailed = true;
+      if (RANDO_DEBUG) {
+        console.log('rando: loadStage FAILED:', {
+          id: stageId,
+          gameSource: this.gameSource,
+          basePath: this.stageBasePath,
+        });
+      }
       this.statusText = `Failed to load stage ${stageId}.`;
       console.error(err);
       this.updateHud();
@@ -3822,25 +3922,10 @@ export class GameCore {
     }
     this.stageParserId = (this.course as any).currentStageParserId ?? this.stageParserId;
     this.stageRulesetId = (this.course as any).currentStageRulesetId ?? this.stageRulesetId;
-      {
-        const totalSrc = (this.course as any).currentStageGameSource as GameSource | undefined;
-        const isPackStage = (this.course as any).currentStageIsPackStage === true;
-        if (totalSrc) {
-          if (isPackStage) {
-            const packBase = getPackStageBasePath(totalSrc);
-            if (packBase) {
-              this.gameSource = totalSrc;
-              this.stageBasePath = packBase;
-            }
-          } else if ((STAGE_BASE_PATHS as any)[totalSrc] && totalSrc !== this.gameSource) {
-            this.gameSource = totalSrc;
-            this.stageBasePath = (STAGE_BASE_PATHS as any)[totalSrc];
-          }
-        }
-      }
+    this.applyRandomizerStageSource();
     this.syncRulesetFromStage();
     try {
-      await this.loadStage(this.course.currentStageId);
+      await this.loadRandomizerStage(this.course.currentStageId);
     } finally {
       this.pendingAdvance = false;
     }
