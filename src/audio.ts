@@ -1,6 +1,8 @@
 import { COLI_FLAGS, GAME_SOURCES, type GameSource } from './shared/constants/index.js';
 import { getMb2wsStageInfo, getSmb2StageInfo } from './smb2_render.js';
 import { STAGE_INFO_MAP } from './noclip/SuperMonkeyBall/StageInfo.js';
+import { getPackStageEnvUnchecked } from './pack.js';
+import { randoDebug } from './randomizer_state.js';
 
 const AUDIO_BASE_PATH = './audio';
 const SFX_DIR = 'sfx';
@@ -50,6 +52,17 @@ const SMB2_BG_MUSIC: Record<string, string> = {
   bg_spa2: 'colony',
   bg_ele2: 'badboon',
   bg_bns2: 'bonus',
+  bg_lav: 'volcano',
+  bg_au_bub2: 'washingmachine',
+  bg_au_gea2: 'clocktower',
+  bg_au_par2: 'amusement_park',
+  bg_au_wat2: 'ocean',
+  bg_fut2: 'colony',
+  bg_pil: 'amusement_park',
+  bg_tar2: 'amusement_park',
+  bg_bow: 'amusement_park',
+  bg_bow2: 'amusement_park',
+  bg_gol2: 'amusement_park',
 };
 
 
@@ -107,6 +120,7 @@ export class AudioManager {
   private announcerGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
   private bufferCache = new Map<string, Promise<AudioBuffer>>();
+  private customBgTrackPool: Array<{ track: string; musicSource: GameSource }> | null = null;
   private rolling = new Map<number, RollingState>();
   private musicIntroSource: AudioBufferSourceNode | null = null;
   private musicLoopSource: AudioBufferSourceNode | null = null;
@@ -199,23 +213,23 @@ export class AudioManager {
     void isHigh;
   }
 
-  async playMusicForStage(stageId: number, gameSource: GameSource) {
-    const bgFile = this.getBgFileName(stageId, gameSource);
+  async playMusicForStage(stageId: number, gameSource: GameSource, isPackStage: boolean = false) {
+    const bgFile = this.getBgFileName(stageId, gameSource, isPackStage);
     if (!bgFile) {
+      this.stopMusic();
+      this.currentMusicKey = null;
       return;
     }
-    const track = this.getMusicTrackPrefix(bgFile, gameSource);
-    if (!track) {
-      return;
-    }
+    const { track, musicSource } = this.resolveMusicTrack(bgFile, gameSource);
+    randoDebug('music:', { stageId, gameSource, isPack: isPackStage, bgFile, track, musicSource });
     const ctx = await this.ensureContext();
-    const musicKey = `${gameSource}:${track}`;
+    const musicKey = `${musicSource}:${track}`;
     if (this.currentMusicKey === musicKey) {
       return;
     }
     this.stopMusic();
     const token = ++this.musicToken;
-    const { introUrl, loopUrl, oneshotUrl } = this.resolveMusicUrls(track, gameSource);
+    const { introUrl, loopUrl, oneshotUrl } = this.resolveMusicUrls(track, musicSource);
     const loopBuffer = loopUrl ? await this.getBuffer(loopUrl) : null;
     const introBuffer = introUrl ? await this.getBuffer(introUrl) : null;
     const oneshotBuffer = loopBuffer ? null : oneshotUrl ? await this.getBuffer(oneshotUrl) : null;
@@ -479,6 +493,70 @@ export class AudioManager {
   };
 }
 
+  private resolveMusicTrack(bgFile: string, gameSource: GameSource): { track: string; musicSource: GameSource } {
+    let musicSource = gameSource;
+    let track = this.getMusicTrackPrefix(bgFile, musicSource);
+    if (!track) {
+      const baseBgFile = bgFile.replace(/^bg_au_/, 'bg_');
+      track = this.getMusicTrackPrefix(baseBgFile, musicSource);
+      if (!track) {
+        if (SMB1_BG_MUSIC[bgFile] || SMB1_BG_MUSIC[baseBgFile]) {
+          track = SMB1_BG_MUSIC[bgFile] ?? SMB1_BG_MUSIC[baseBgFile];
+          musicSource = GAME_SOURCES.SMB1;
+        } else if (SMB2_BG_MUSIC[bgFile] || SMB2_BG_MUSIC[baseBgFile]) {
+          track = SMB2_BG_MUSIC[bgFile] ?? SMB2_BG_MUSIC[baseBgFile];
+          musicSource = GAME_SOURCES.SMB2;
+        }
+      }
+    }
+    if (!track) {
+      const baseBgFile = bgFile.replace(/^bg_au_/, 'bg_');
+      const pool = this.getCustomBgTrackPool();
+      if (pool.length > 0) {
+        const index = this.hashStringToIndex(baseBgFile, pool.length);
+        track = pool[index].track;
+        musicSource = pool[index].musicSource;
+      } else {
+        track = 'jungle';
+        musicSource = gameSource;
+      }
+    }
+    return { track, musicSource };
+  }
+
+  private getCustomBgTrackPool(): Array<{ track: string; musicSource: GameSource }> {
+    if (this.customBgTrackPool) {
+      return this.customBgTrackPool;
+    }
+    const seen = new Set<string>();
+    const pool: Array<{ track: string; musicSource: GameSource }> = [];
+    for (const trackName of Object.values(SMB2_BG_MUSIC)) {
+      const key = `${GAME_SOURCES.SMB2}:${trackName}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        pool.push({ track: trackName, musicSource: GAME_SOURCES.SMB2 });
+      }
+    }
+    for (const trackName of Object.values(SMB1_BG_MUSIC)) {
+      const key = `${GAME_SOURCES.SMB1}:${trackName}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        pool.push({ track: trackName, musicSource: GAME_SOURCES.SMB1 });
+      }
+    }
+    this.customBgTrackPool = pool;
+    return pool;
+  }
+
+  private hashStringToIndex(value: string, size: number): number {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < value.length; i += 1) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return size > 0 ? hash % size : 0;
+  }
+
   private getMusicTrackPrefix(bgFile: string, gameSource: GameSource) {
     if (gameSource === GAME_SOURCES.SMB2 || gameSource === GAME_SOURCES.MB2WS) {
       return SMB2_BG_MUSIC[bgFile] ?? null;
@@ -527,12 +605,18 @@ export class AudioManager {
     return Math.max(0, Math.min(1, value));
   }
 
-  private getBgFileName(stageId: number, gameSource: GameSource) {
+  private getBgFileName(stageId: number, gameSource: GameSource, isPackStage: boolean = false) {
+    if (isPackStage) {
+      const packBg = getPackStageEnvUnchecked(stageId)?.bgInfo?.fileName;
+      if (packBg) {
+        return packBg;
+      }
+    }
     if (gameSource === GAME_SOURCES.SMB2) {
-      return getSmb2StageInfo(stageId)?.bgInfo?.fileName ?? null;
+      return getSmb2StageInfo(stageId, false)?.bgInfo?.fileName ?? null;
     }
     if (gameSource === GAME_SOURCES.MB2WS) {
-      return getMb2wsStageInfo(stageId)?.bgInfo?.fileName ?? null;
+      return getMb2wsStageInfo(stageId, false)?.bgInfo?.fileName ?? null;
     }
     return STAGE_INFO_MAP.get(stageId as any)?.bgInfo?.fileName ?? null;
   }

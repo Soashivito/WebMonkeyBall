@@ -1,5 +1,5 @@
 import { GAME_SOURCES, INFO_FLAGS, type GameSource } from './shared/constants/index.js';
-import { getPackStageName } from './pack.js';
+import { getPackStageNameUnchecked, getPackStageBasePath } from './pack.js';
 import { getStageNameForSource } from './stage_names.js';
 
 const HUD_WIDTH = 640;
@@ -948,7 +948,12 @@ function getSmb2ChallengeDifficulty(game: any, floorInfo: any): 'beginner' | 'ad
 
 function getSmb2StageNameText(game: any, floorInfo: any, maxLength: number): string {
   const stageId = Math.max(0, Math.trunc(game?.stage?.stageId ?? game?.course?.currentStageId ?? 0));
-  const packName = getPackStageName(stageId);
+  const activeGameSource = game?.gameSource === GAME_SOURCES.MB2WS ? GAME_SOURCES.MB2WS : GAME_SOURCES.SMB2;
+  const packBasePath = getPackStageBasePath(activeGameSource);
+  const isPackStage =
+    Boolean(game?.course?.currentStageIsPackStage) ||
+    (packBasePath !== null && game?.stageBasePath === packBasePath);
+  const packName = isPackStage ? getPackStageNameUnchecked(stageId) : null;
   if (packName) {
     const text = packName.toUpperCase();
     return text.length > maxLength ? text.slice(0, maxLength) : text;
