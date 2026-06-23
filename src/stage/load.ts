@@ -8,6 +8,7 @@ import { STAGE_BASE_PATHS } from '../shared/constants/index.js';
 import { sqrt } from '../math.js';
 import { parseGma } from '../gma.js';
 import { parseAVTpl } from '../tpl.js';
+import { parseAVTpl as parseNaomiTpl } from '../noclip/SuperMonkeyBall/AVTpl.js';
 import { parseStageDef } from './parse/index.js';
 import { FLY_IN_MIN_RADIUS, SWITCH_MODEL_SUFFIXES, formatStageId } from './stage_constants.js';
 
@@ -134,7 +135,7 @@ export async function loadGoalTapeAnchorY(basePath = STAGE_BASE_PATHS.smb1, game
   if (!tplSlice.byteLength || !nlSlice.byteLength) {
     return null;
   }
-  const tpl = parseAVTpl(tplSlice.arrayBuffer, 'common-nl');
+  const tpl = parseNaomiTpl(tplSlice, 'common-nl');
   const nlObj = parseNlObj(nlSlice, tpl);
   let model = nlObj.get(CommonNlModelID.GOAL_TAPE);
   if (!model && (gameSource === 'smb2' || gameSource === 'mb2ws')) {

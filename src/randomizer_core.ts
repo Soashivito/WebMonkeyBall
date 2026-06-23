@@ -9,6 +9,7 @@ export interface RandomizerStageEntry {
   difficulty?: string;
   gameSource?: string;
   packStage?: boolean;
+  packId?: string;
 }
 
 export interface RandomizerCourse {
@@ -22,6 +23,7 @@ export interface RandomizerCourse {
   currentStageRulesetId?: string;
   currentStageGameSource?: string;
   currentStageIsPackStage?: boolean;
+  currentStagePackId?: string;
   currentStageName?: string;
   currentFloor?: number;
 }
@@ -96,9 +98,8 @@ function setCourseStage(course: RandomizerCourse, index: number) {
     course.currentStageGameSource = entry.gameSource;
   }
   course.currentStageIsPackStage = entry.packStage === true;
-  if (entry.name !== undefined) {
-    course.currentStageName = entry.name;
-  }
+  course.currentStagePackId = entry.packStage === true ? entry.packId : undefined;
+  course.currentStageName = entry.name ?? '';
   course.currentFloor = index + 1;
 }
 

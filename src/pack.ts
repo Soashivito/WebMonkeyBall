@@ -89,6 +89,8 @@ export type LoadedPack = {
 
 let activePack: LoadedPack | null = null;
 let packEnabled = true;
+const loadedPackRegistry = new Map<string, LoadedPack>();
+let renderPinnedPack: LoadedPack | null = null;
 const urlSliceCache = new Map<string, ArrayBufferSlice>();
 const urlSliceInFlight = new Map<string, Promise<ArrayBufferSlice>>();
 const packSliceCache = new WeakMap<LoadedPack, Map<string, ArrayBufferSlice>>();
@@ -174,6 +176,30 @@ export function getActivePack() {
   return activePack;
 }
 
+export function registerPackInRegistry(pack: LoadedPack): void {
+  loadedPackRegistry.set(packIdentity(pack), pack);
+}
+
+export function unregisterPackFromRegistry(identity: string): void {
+  loadedPackRegistry.delete(normalizeIdentity(identity));
+}
+
+export function getLoadedPackByIdentity(identity: string): LoadedPack | null {
+  return loadedPackRegistry.get(normalizeIdentity(identity)) ?? null;
+}
+
+export function getAllLoadedPacks(): LoadedPack[] {
+  return Array.from(loadedPackRegistry.values());
+}
+
+export function setRenderPinnedPack(pack: LoadedPack | null): void {
+  renderPinnedPack = pack;
+}
+
+export function clearRenderPinnedPack(): void {
+  renderPinnedPack = null;
+}
+
 export function packStageHasModel(stageId: number): boolean {
   const pack = activePack;
   if (!pack || !pack.provider.has) {
@@ -201,6 +227,22 @@ export function getPackStageEnv(stageId: number): PackStageEnv | null {
     return null;
   }
   return activePack.manifest.stageEnv[String(stageId)] ?? null;
+}
+
+export function hasActivePackForGameSource(gameSource: GameSource): boolean {
+  return activePack?.manifest.gameSource === gameSource;
+}
+
+export function getPackStageEnvUnchecked(stageId: number): PackStageEnv | null {
+  if (!activePack?.manifest.stageEnv) {
+    return null;
+  }
+  return activePack.manifest.stageEnv[String(stageId)] ?? null;
+}
+
+export function getPackStageNameUnchecked(stageId: number): string | null {
+  const name = activePack?.manifest.content?.stageNames?.[String(stageId)];
+  return name ?? null;
 }
 
 export function getPackStageRules(stageId: number): PackStageRules | null {
@@ -262,7 +304,7 @@ export function hasPackForGameSource(gameSource: GameSource): boolean {
 }
 
 export async function fetchPackSlice(path: string): Promise<ArrayBufferSlice> {
-  const pack = activePack;
+  const pack = renderPinnedPack ?? activePack;
   const normalized = normalizePackPath(path);
   const defaultBasePaths = Object.values(STAGE_BASE_PATHS).map((base) => normalizePackPath(base));
   const isDefaultPath = defaultBasePaths.some((base) => normalized === base || normalized.startsWith(`${base}/`));
@@ -306,6 +348,52 @@ export async function fetchPackBuffer(path: string): Promise<ArrayBuffer> {
   return slice.arrayBuffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength);
 }
 
+function packHasUsableChallengeOrder(manifest: PackManifest): boolean {
+  const order = manifest.courses?.challenge?.order;
+  if (!order || typeof order !== 'object') {
+    return false;
+  }
+  for (const key of Object.keys(order)) {
+    const list = (order as Record<string, unknown>)[key];
+    if (Array.isArray(list) && list.length > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function packPlayableStageIds(manifest: PackManifest, providerHas?: (path: string) => boolean): number[] {
+  const ids: number[] = Array.isArray(manifest.content?.stages) ? manifest.content!.stages! : [];
+  const stageNames = manifest.content?.stageNames;
+  const named = stageNames && Object.keys(stageNames).length > 0
+    ? new Set(Object.keys(stageNames).map((key) => Number(key)).filter((id) => Number.isFinite(id)))
+    : null;
+  const fileCheck = (id: number): boolean => {
+    if (!providerHas) {
+      return true;
+    }
+    const idStr = String(id).padStart(3, '0');
+    return providerHas(`st${idStr}/st${idStr}.gma`) && providerHas(`st${idStr}/STAGE${idStr}.lz`);
+  };
+  return ids.filter((id) => typeof id === 'number' && Number.isFinite(id) && fileCheck(id) && (named === null || named.has(id)));
+}
+
+function synthesizePackCourses(manifest: PackManifest, providerHas?: (path: string) => boolean): void {
+  if (packHasUsableChallengeOrder(manifest)) {
+    return;
+  }
+  const playable = packPlayableStageIds(manifest, providerHas);
+  if (playable.length === 0) {
+    return;
+  }
+  const courses: PackCourseData = manifest.courses ?? {};
+  const challenge = courses.challenge ?? {};
+  challenge.order = { beginner: playable.slice() };
+  challenge.bonus = { beginner: [] };
+  courses.challenge = challenge;
+  manifest.courses = courses;
+}
+
 export async function loadPackFromUrl(url: string): Promise<LoadedPack> {
   if (url.endsWith('.zip')) {
     const response = await fetch(url);
@@ -332,6 +420,7 @@ export async function loadPackFromUrl(url: string): Promise<LoadedPack> {
       return res.arrayBuffer();
     },
   };
+  synthesizePackCourses(manifest, undefined);
   return { manifest, provider, basePath: manifest.basePath ?? basePath };
 }
 
@@ -364,6 +453,7 @@ export async function loadPackFromFileList(fileList: FileList): Promise<LoadedPa
     },
     has: (path: string) => map.has(normalizePackPath(path)),
   };
+  synthesizePackCourses(manifest, provider.has);
   return { manifest, provider, basePath: '' };
 }
 
@@ -389,5 +479,6 @@ function loadPackFromZipBuffer(buffer: ArrayBuffer, basePath: string): LoadedPac
       return entry.buffer.slice(entry.byteOffset, entry.byteOffset + entry.byteLength);
     },
   };
+  synthesizePackCourses(manifest, provider.has);
   return { manifest, provider, basePath };
 }

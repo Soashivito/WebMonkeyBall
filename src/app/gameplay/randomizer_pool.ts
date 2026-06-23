@@ -9,8 +9,8 @@ import {
   listMb2wsChallengeDifficulties,
 } from '../../course_mb2ws.js';
 import { GAME_SOURCES, STAGE_BASE_PATHS, type GameSource } from '../../shared/constants/index.js';
-import { getActivePack, getPackStageRules, getPackStageName, packStageHasModel, packStageHasStagedef, hasPackForGameSource } from '../../pack.js';
-import { setVerifiedInstalledStages, getVerifiedInstalledStages, RANDO_DEBUG } from '../../randomizer_state.js';
+import { getActivePack, getPackStageRules, getPackStageNameUnchecked, packStageHasModel, packStageHasStagedef, hasPackForGameSource, getAllLoadedPacks, setActivePack, setPackEnabled, isPackEnabled, packIdentity } from '../../pack.js';
+import { setVerifiedInstalledStages, getVerifiedInstalledStages, RANDO_DEBUG, randoDebug } from '../../randomizer_state.js';
 import { STAGE_INFO_MAP } from '../../noclip/SuperMonkeyBall/StageInfo.js';
 import { getSmb2StageInfo, getMb2wsStageInfo } from '../../smb2_render.js';
 
@@ -124,7 +124,7 @@ function packStageEntries(): any[] {
     )
     .map((id) => {
       const rules = getPackStageRules(id);
-      const name = getPackStageName(id);
+      const name = getPackStageNameUnchecked(id);
       return {
         id,
         parserId: rules?.parserId,
@@ -203,7 +203,7 @@ async function verifySourceStages(source: GameSource): Promise<void> {
   if (!anyPresent) {
     setVerifiedInstalledStages(source, []);
     if (RANDO_DEBUG) {
-      console.log(`rando: verified ${source}: content folder appears absent, 0 stages`);
+      randoDebug(`verified ${source}: content folder appears absent, 0 stages`);
     }
     return;
   }
@@ -236,7 +236,7 @@ async function verifySourceStages(source: GameSource): Promise<void> {
   await Promise.all(workers);
   setVerifiedInstalledStages(source, available);
   if (RANDO_DEBUG) {
-    console.log(`rando: verified ${source}: ${available.length}/${candidates.length} present`, available.slice(0, 12));
+    randoDebug(`verified ${source}: ${available.length}/${candidates.length} present`, available.slice(0, 12));
   }
 }
 
@@ -416,54 +416,57 @@ export function buildTotalRandomizerPool(): RandomizerPool | null {
     pushFrom(GAME_SOURCES.MB2WS, list, bf, difficulty);
   }
 
-  const activePack = getActivePack();
-  if (RANDO_DEBUG) {
-    if (!activePack) {
-      console.log('rando: pack append: no active pack (select the pack so its stages enter the pool)');
-    } else {
-      const declared: number[] = activePack.manifest?.content?.stages ?? [];
-      const withModel = declared.filter((id) => packStageHasModel(id));
-      const withBoth = withModel.filter((id) => packStageHasStagedef(id));
-      console.log('rando: pack append:', {
-        name: activePack.manifest?.name,
-        source: activePack.manifest?.gameSource,
-        hasProvider: typeof (activePack as any).provider?.fetch === 'function',
-        providerHas: typeof (activePack as any).provider?.has === 'function',
+  const allPacks = getAllLoadedPacks();
+  const savedActivePack = getActivePack();
+  const savedPackEnabled = isPackEnabled();
+  const packDebug: Array<Record<string, unknown>> = [];
+  for (const pack of allPacks) {
+    const identity = packIdentity(pack);
+    const packSource = pack.manifest.gameSource;
+    setActivePack(pack);
+    setPackEnabled(true);
+    const entries = packStageEntries();
+    if (RANDO_DEBUG) {
+      const declared: number[] = pack.manifest?.content?.stages ?? [];
+      packDebug.push({
+        name: pack.manifest?.name,
+        identity,
+        source: packSource,
         declared: declared.length,
-        withModel: withModel.length,
-        withModelAndStagedef: withBoth.length,
-        entries: packStageEntries().length,
-        verified: getVerifiedPackStageSet()?.size ?? null,
+        entries: entries.length,
       });
     }
-  }
-  if (activePack) {
-    const packSource = activePack.manifest.gameSource;
-    const packVerified = getVerifiedPackStageSet();
-    packStageEntries().forEach((entry, index) => {
+    entries.forEach((entry) => {
       if (entry == null || typeof entry.id !== 'number') {
         return;
       }
-      if (packVerified && !packVerified.has(entry.id)) {
-        return;
-      }
-      const key = `pack:${packSource}:${entry.id}`;
+      const key = `pack:${identity}:${entry.id}`;
       if (seen.has(key)) {
         return;
       }
       seen.add(key);
-      stageList.push({ ...entry, gameSource: packSource, packStage: true });
+      stageList.push({ ...entry, gameSource: packSource, packStage: true, packId: identity });
       bonusFlags.push(false);
     });
+  }
+  setActivePack(savedActivePack);
+  setPackEnabled(savedPackEnabled);
+
+  if (RANDO_DEBUG) {
+    if (allPacks.length === 0) {
+      randoDebug('pack append: no packs loaded (load a pack so its stages enter the pool)');
+    } else {
+      randoDebug('pack append:', { packs: allPacks.length, perPack: packDebug });
+    }
   }
 
   if (RANDO_DEBUG) {
     const bySource: Record<string, number> = {};
     for (const entry of stageList) {
-      const dbgKey = `${entry.packStage ? 'pack:' : ''}${entry.gameSource}`;
+      const dbgKey = entry.packStage ? `pack:${entry.packId}` : entry.gameSource;
       bySource[dbgKey] = (bySource[dbgKey] ?? 0) + 1;
     }
-    console.log('rando: total pool built:', stageList.length, bySource);
+    randoDebug('total pool built:', { count: stageList.length, packs: allPacks.length, bySource });
   }
 
   return stageList.length > 0 ? { stageList, bonusFlags } : null;

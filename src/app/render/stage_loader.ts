@@ -73,7 +73,7 @@ export class StageLoader {
     const isNaomi = this.isNaomiStage(stageId);
     const stageNlObjPath = isNaomi ? `${stageBasePath}/st${stageIdStr}/st${stageIdStr}_p.lz` : null;
     const stageNlTplPath = isNaomi ? `${stageBasePath}/st${stageIdStr}/st${stageIdStr}.lz` : null;
-    const smb2BasePath = this.getStageBasePath(GAME_SOURCES.SMB2);
+    const smb2BasePath = STAGE_BASE_PATHS[GAME_SOURCES.SMB2];
     const goalTimerGmaPromise: Promise<Gma.Gma | null> =
       (async () => {
         if (!smb2BasePath) {
@@ -178,15 +178,25 @@ export class StageLoader {
 
     const bgName = stageInfo.bgInfo.fileName;
     const emptySlice = () => new ArrayBufferSlice(new ArrayBuffer(0));
-    const baseBgBasePath =
-      STAGE_BASE_PATHS[gameSource === GAME_SOURCES.MB2WS ? GAME_SOURCES.MB2WS : GAME_SOURCES.SMB2];
+    const baseBgCandidates = Array.from(
+      new Set(
+        [
+          STAGE_BASE_PATHS[gameSource === GAME_SOURCES.MB2WS ? GAME_SOURCES.MB2WS : GAME_SOURCES.SMB2],
+          STAGE_BASE_PATHS[GAME_SOURCES.SMB1],
+          STAGE_BASE_PATHS[GAME_SOURCES.SMB2],
+        ].filter((base): base is string => !!base),
+      ),
+    );
     const fetchBgSlice = async (rel: string): Promise<ArrayBufferSlice> => {
       try {
         return await this.fetchSlice(`${stageBasePath}/${rel}`);
       } catch (_primaryErr) {
-        if (stageBasePath !== baseBgBasePath) {
+        for (const baseCandidate of baseBgCandidates) {
+          if (baseCandidate === stageBasePath) {
+            continue;
+          }
           try {
-            return await this.fetchSlice(`${baseBgBasePath}/${rel}`);
+            return await this.fetchSlice(`${baseCandidate}/${rel}`);
           } catch (_fallbackErr) {
           }
         }

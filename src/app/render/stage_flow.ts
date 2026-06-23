@@ -2,8 +2,8 @@ import type { Game } from '../../game.js';
 import { GAME_SOURCES, type GameSource } from '../../shared/constants/index.js';
 import { StageId, STAGE_INFO_MAP } from '../../noclip/SuperMonkeyBall/StageInfo.js';
 import { getMb2wsStageInfo, getSmb2StageInfo } from '../../smb2_render.js';
-import { getPackStageBasePath } from '../../pack.js';
-import { RANDO_DEBUG } from '../../randomizer_state.js';
+import { getPackStageBasePath, getActivePack, getLoadedPackByIdentity, setActivePack, setPackEnabled, setRenderPinnedPack, clearRenderPinnedPack } from '../../pack.js';
+import { RANDO_DEBUG, randoDebug } from '../../randomizer_state.js';
 
 type StageFlowDeps = {
   game: Game;
@@ -174,16 +174,35 @@ export class StageFlowController {
 
     const activeGameSource = this.deps.game.gameSource ?? this.deps.getActiveGameSource();
     const dbgBasePath = this.deps.game.stageBasePath;
+    const renderPackId = (this.deps.game as any)?.course?.currentStagePackId as string | undefined;
+    if (renderPackId) {
+      const owningPack = getLoadedPackByIdentity(renderPackId);
+      if (owningPack) {
+        if (owningPack !== getActivePack()) {
+          setActivePack(owningPack);
+          setPackEnabled(true);
+        }
+        setRenderPinnedPack(owningPack);
+      } else {
+        clearRenderPinnedPack();
+      }
+    } else {
+      clearRenderPinnedPack();
+    }
     const packBasePath = getPackStageBasePath(activeGameSource);
     const dbgIsPack =
       Boolean((this.deps.game as any)?.course?.currentStageIsPackStage) ||
       (packBasePath !== null && dbgBasePath === packBasePath);
     if (RANDO_DEBUG) {
-      console.log('rando: render start:', {
+      const renderPack = renderPackId ? getLoadedPackByIdentity(renderPackId) : null;
+      randoDebug('render start:', {
         stageId,
         gameSource: activeGameSource,
         basePath: dbgBasePath,
         isPack: dbgIsPack,
+        packId: renderPackId ?? null,
+        packName: renderPack?.manifest?.name ?? getActivePack()?.manifest?.name ?? null,
+        activePack: getActivePack()?.manifest?.id ?? null,
       });
     }
     if (activeGameSource !== GAME_SOURCES.SMB1) {
@@ -192,8 +211,9 @@ export class StageFlowController {
       try {
         stageData = await this.deps.loadRenderStageSmb2(stageId, stage, activeGameSource, this.deps.game.stageBasePath, dbgIsPack);
       } catch (renderErr) {
+        clearRenderPinnedPack();
         if (RANDO_DEBUG) {
-          console.log('rando: render FAILED (smb2):', {
+          randoDebug('render FAILED (smb2):', {
             stageId,
             gameSource: activeGameSource,
             basePath: dbgBasePath,
@@ -204,6 +224,7 @@ export class StageFlowController {
         }
         throw renderErr;
       }
+      clearRenderPinnedPack();
       if (token !== this.stageLoadToken) {
         return;
       }
@@ -212,7 +233,7 @@ export class StageFlowController {
         this.deps.createRenderer(stageData);
       } catch (createErr) {
         if (RANDO_DEBUG) {
-          console.log('rando: createRenderer FAILED (smb2):', {
+          randoDebug('createRenderer FAILED (smb2):', {
             stageId,
             gameSource: activeGameSource,
             basePath: dbgBasePath,
@@ -234,6 +255,7 @@ export class StageFlowController {
     }
 
     const stageData = await this.deps.loadRenderStage(stageId, this.deps.game.stageBasePath);
+    clearRenderPinnedPack();
     if (token !== this.stageLoadToken) {
       return;
     }
