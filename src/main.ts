@@ -119,7 +119,9 @@ import {
   loadPackFromZipFile,
 } from './pack.js';
 import type { LoadedPack } from './pack.js';
-import { savePack as persistPackToStore, getAllPacks as getStoredPacks } from './app/packs/pack_store.js';
+import { savePack as persistPackToStore, getAllPacks as getStoredPacks, deletePack as deletePackFromStore, type StoredPack } from './app/packs/pack_store.js';
+import { randoDebug } from './randomizer_state.js';
+import { isTotalRandomizerEnabled } from './randomizer_state.js';
 
 const LEADERBOARDS_MENU_ENABLED = false;
 declare const __APP_COMMIT__: string | undefined;
@@ -457,6 +459,45 @@ export function runMainApp() {
     await packLoader.initFromQuery();
   }
   
+  function getRequiredPackInfos(): Array<{ id: string; name: string }> {
+    if (isTotalRandomizerEnabled()) {
+      const list = packSelection.getLoadedPackList();
+      if (list.length > 0) {
+        return list.map((entry) => ({ id: entry.identity, name: entry.name }));
+      }
+    }
+    const selection = packSelection.resolveSelectedGameSource().selection;
+    if (typeof selection === 'string' && selection.startsWith('pack:')) {
+      const active = packSelection.getActivePackInfo();
+      return active ? [{ id: active.id, name: active.name }] : [];
+    }
+    return [];
+  }
+
+  function getMissingRoomPacks(meta: { packIds?: string[]; packNames?: string[]; packId?: string; packName?: string } | null | undefined): Array<{ id: string; name: string }> {
+    if (!meta) {
+      return [];
+    }
+    const required: Array<{ id: string; name: string }> = [];
+    const seen = new Set<string>();
+    const add = (id: string | undefined, name: string | undefined) => {
+      if (!id) {
+        return;
+      }
+      const key = id.replace(/\s+/g, '-').toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      required.push({ id, name: name ?? 'Custom pack' });
+    };
+    if (Array.isArray(meta.packIds)) {
+      meta.packIds.forEach((id, index) => add(id, meta.packNames?.[index]));
+    }
+    add(meta.packId, meta.packName);
+    return required.filter((entry) => !packSelection.hasPackIdentity(entry.id));
+  }
+
   async function applyLoadedPack(pack: LoadedPack) {
     packSelection.registerLoadedPack(pack);
     void refreshLeaderboardAllowlist(true);
@@ -626,6 +667,7 @@ export function runMainApp() {
   let frameStatsEnabled = false;
   let activeGameSource: GameSource = GAME_SOURCES.SMB1;
   let levelSelectSingleplayerMode: 'practice' | null = null;
+  let levelSelectPracticeSourceValue: string | null = null;
   let interpolationEnabled = true;
   const syncState: GameplaySyncState = {
     timeFrames: null,
@@ -925,6 +967,7 @@ export function runMainApp() {
       normalizeMultiplayerGameMode,
       profileFallbackForPlayer: presenceUi.profileFallbackForPlayer,
       packSelection,
+      getMissingRoomPacks,
       pendingSpawnStageSeq,
       handleHostDisconnect,
       leaderboardsClient,
@@ -1158,6 +1201,7 @@ export function runMainApp() {
       const info = packSelection.getActivePackInfo();
       return info ? { id: info.id, name: info.name } : null;
     },
+    getRequiredPackInfos: () => getRequiredPackInfos(),
   });
   
   const leaderboardSessionFlow = new LeaderboardSessionController({
@@ -1631,13 +1675,38 @@ export function runMainApp() {
       settingsTabs.setLevelSelectReturnMenu(returnMenu ?? currentMenu);
     }
     levelSelectSingleplayerMode = singleplayerMode;
+    if (singleplayerMode === 'practice' && gameSourceSelect && levelSelectPracticeSourceValue) {
+      const hasOption = Array.from(gameSourceSelect.options).some(
+        (option) => option.value === levelSelectPracticeSourceValue,
+      );
+      if (hasOption && gameSourceSelect.value !== levelSelectPracticeSourceValue) {
+        gameSourceSelect.value = levelSelectPracticeSourceValue;
+      }
+      packSelection.syncEnabled();
+      courseSelection.updateGameSourceFields();
+      courseSelection.updateSmb1Stages();
+      randoDebug('practice menu open: restored source', {
+        source: gameSourceSelect.value,
+        activePack: packSelection.getActivePackInfo()?.id ?? null,
+      });
+    }
     updateLevelSelectMenuLabels();
     menuFlow.setActiveMenu('level-select');
   }
 
   function handleLevelSelectConfirm() {
     if (levelSelectSingleplayerMode === 'practice') {
+      packSelection.syncEnabled();
+      if (gameSourceSelect) {
+        levelSelectPracticeSourceValue = gameSourceSelect.value;
+      }
       const selection = buildSingleplayerSelectionFromLevelSelect();
+      randoDebug('practice start', {
+        source: gameSourceSelect?.value ?? null,
+        resolvedGameSource: selection.gameSource,
+        activePack: packSelection.getActivePackInfo()?.id ?? null,
+        courseConfig: selection.courseConfig,
+      });
       matchStartFlow?.startSingleplayerSelection(selection.gameSource, selection.courseConfig, {
         practiceMode: true,
         enableLeaderboardSession: false,
@@ -1903,6 +1972,93 @@ export function runMainApp() {
     packFileInput,
     packFolderInput,
   });
+
+  const packManageButton = document.getElementById('pack-manage') as HTMLButtonElement | null;
+  const packManagePanel = document.getElementById('pack-manage-panel');
+  function downloadStoredPack(rec: StoredPack) {
+    try {
+      const blob = new Blob([rec.bytes], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const safeName = (rec.name || 'pack').replace(/[^a-z0-9_\-]+/gi, '_');
+      link.download = `${safeName}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      console.warn('Pack download failed.', err);
+    }
+  }
+  function refreshCourseUiAfterPackChange() {
+    packSelection.refreshUi();
+    courseSelection.updateSmb2ChallengeStages();
+    courseSelection.updateSmb2StoryOptions();
+    courseSelection.updateSmb1Stages();
+    courseSelection.updateGameSourceFields();
+    syncCoursePlaySourceOptions();
+    syncCoursePlaySourceSelection();
+  }
+  async function deleteStoredPack(identity: string) {
+    try {
+      await deletePackFromStore(identity);
+    } catch (err) {
+      console.warn('Pack delete failed.', err);
+    }
+    packSelection.removePack(identity);
+    refreshCourseUiAfterPackChange();
+    await rebuildPackManagePanel();
+  }
+  async function rebuildPackManagePanel() {
+    if (!packManagePanel) {
+      return;
+    }
+    packManagePanel.textContent = '';
+    let stored: StoredPack[] = [];
+    try {
+      stored = await getStoredPacks();
+    } catch (err) {
+      console.warn('Pack store: failed to list packs.', err);
+    }
+    if (stored.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'pack-status';
+      empty.textContent = 'No stored packs';
+      packManagePanel.appendChild(empty);
+      return;
+    }
+    for (const rec of stored) {
+      const row = document.createElement('div');
+      row.className = 'pack-manage-row';
+      const label = document.createElement('span');
+      label.className = 'pack-status';
+      label.textContent = `${rec.name} (${String(rec.gameSource).toUpperCase()})`;
+      const downloadButton = document.createElement('button');
+      downloadButton.className = 'ghost compact';
+      downloadButton.type = 'button';
+      downloadButton.textContent = 'Download';
+      downloadButton.addEventListener('click', () => downloadStoredPack(rec));
+      const deleteButton = document.createElement('button');
+      deleteButton.className = 'ghost compact';
+      deleteButton.type = 'button';
+      deleteButton.textContent = 'Delete';
+      deleteButton.addEventListener('click', () => {
+        void deleteStoredPack(rec.identity);
+      });
+      row.append(label, downloadButton, deleteButton);
+      packManagePanel.appendChild(row);
+    }
+  }
+  if (packManageButton && packManagePanel) {
+    packManageButton.addEventListener('click', () => {
+      const willShow = packManagePanel.classList.contains('hidden');
+      packManagePanel.classList.toggle('hidden');
+      if (willShow) {
+        void rebuildPackManagePanel();
+      }
+    });
+  }
   
   replayController.bindReplayUi();
   

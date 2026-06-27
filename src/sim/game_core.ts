@@ -3,8 +3,9 @@ import { Smb2Course, type Smb2CourseConfig } from '../course_smb2.js';
 import { Mb2wsCourse, type Mb2wsCourseConfig } from '../course_mb2ws.js';
 import { buildRandomizerPool, buildTotalRandomizerPool, ensureStagesVerified, ensurePackStagesVerified, RANDOMIZER_PACK_KEY } from '../app/gameplay/randomizer_pool.js';
 import { applyRandomizerPool, randomizerAdvanceCourse, markCurrentRandomizerStageVisited } from '../randomizer_core.js';
-import { isRandomizerEnabled, getRandomizerGroups, isTotalRandomizerEnabled, markStageRuntimeUnavailable, RANDO_DEBUG } from '../randomizer_state.js';
-import { getActivePack, hasPackForGameSource, getPackStageBasePath } from '../pack.js';
+import { isRandomizerEnabled, getRandomizerGroups, isTotalRandomizerEnabled, markStageRuntimeUnavailable, RANDO_DEBUG, randoDebug } from '../randomizer_state.js';
+import { getActivePack, hasPackForGameSource, getPackStageBasePath, getLoadedPackByIdentity, setActivePack, setPackEnabled, clearRenderPinnedPack, packIdentity } from '../pack.js';
+import type { LoadedPack } from '../pack.js';
 import { loadGoalTapeAnchorY, loadStageDef, loadStageModelBounds, StageRuntime } from '../stage.js';
 import { SMB1_PARSER_ID } from '../stage/parse/parsers/smb1.js';
 import { SMB2_PARSER_ID } from '../stage/parse/parsers/smb2.js';
@@ -2335,7 +2336,14 @@ export class GameCore {
       }
 
       const totalOn = isTotalRandomizerEnabled();
-      if (isRandomizerEnabled() || totalOn) {
+      if (this.practiceMode && (isRandomizerEnabled() || totalOn)) {
+        randoDebug('practice: randomizer pool skipped', {
+          stageId: (this.course as any)?.currentStageId,
+          gameSource: this.gameSource,
+          basePath: this.stageBasePath,
+        });
+      }
+      if (!this.practiceMode && (isRandomizerEnabled() || totalOn)) {
         try {
           await ensureStagesVerified();
           await ensurePackStagesVerified();
@@ -2382,6 +2390,25 @@ export class GameCore {
     this.onReadyToResume?.();
   }
 
+  private resolveCurrentStagePack(): LoadedPack | null {
+    const explicitId = (this.course as any)?.currentStagePackId as string | undefined;
+    if (explicitId) {
+      const byId = getLoadedPackByIdentity(explicitId);
+      if (byId) {
+        return byId;
+      }
+    }
+    const active = getActivePack();
+    if (!active) {
+      return null;
+    }
+    const packBase = getPackStageBasePath(this.gameSource);
+    const isPack =
+      (this.course as any)?.currentStageIsPackStage === true ||
+      (packBase !== null && this.stageBasePath === packBase);
+    return isPack && active.manifest.gameSource === this.gameSource ? active : null;
+  }
+
   private applyRandomizerStageSource() {
     const totalSrc = (this.course as any)?.currentStageGameSource as GameSource | undefined;
     if (!totalSrc) {
@@ -2389,18 +2416,34 @@ export class GameCore {
     }
     const isPackStage = (this.course as any).currentStageIsPackStage === true;
     if (isPackStage) {
-      let packBase: string | null | undefined = getPackStageBasePath(totalSrc);
-      if (packBase == null) {
-        const pack = getActivePack();
-        if (pack && pack.manifest.gameSource === totalSrc) {
-          packBase = pack.basePath;
+      const packId = (this.course as any)?.currentStagePackId as string | undefined;
+      let pack = packId ? getLoadedPackByIdentity(packId) : null;
+      if (!pack || pack.manifest.gameSource !== totalSrc) {
+        const active = getActivePack();
+        if (active && active.manifest.gameSource === totalSrc) {
+          pack = active;
         }
       }
-      if (packBase != null) {
+      if (pack && pack.manifest.gameSource === totalSrc) {
+        setActivePack(pack);
+        setPackEnabled(true);
         this.gameSource = totalSrc;
-        this.stageBasePath = packBase;
+        this.stageBasePath = pack.basePath;
+      } else {
+        let packBase: string | null | undefined = getPackStageBasePath(totalSrc);
+        if (packBase == null) {
+          const active = getActivePack();
+          if (active && active.manifest.gameSource === totalSrc) {
+            packBase = active.basePath;
+          }
+        }
+        if (packBase != null) {
+          this.gameSource = totalSrc;
+          this.stageBasePath = packBase;
+        }
       }
     } else {
+      setPackEnabled(false);
       const base = (STAGE_BASE_PATHS as any)[totalSrc];
       if (base) {
         this.gameSource = totalSrc;
@@ -2411,12 +2454,14 @@ export class GameCore {
     this.stageRulesetId = totalSrc === GAME_SOURCES.SMB1 ? 'smb1' : 'smb2';
     this.ruleset = getRulesetById(this.stageRulesetId);
     if (RANDO_DEBUG) {
-      console.log('rando: source switch:', {
+      randoDebug('source switch:', {
         id: (this.course as any)?.currentStageId,
         curSrc: totalSrc,
         gameSource: this.gameSource,
         basePath: this.stageBasePath,
         parserId: this.stageParserId,
+        isPack: isPackStage,
+        packId: (this.course as any)?.currentStagePackId ?? null,
       });
     }
   }
@@ -3245,6 +3290,7 @@ export class GameCore {
   }
 
   async loadStage(stageId: number) {
+    clearRenderPinnedPack();
     if (
       (isRandomizerEnabled() || isTotalRandomizerEnabled()) &&
       this.course &&
@@ -3270,13 +3316,19 @@ export class GameCore {
     this.onStageLoadStart?.(stageId);
 
     try {
+      const owningPack = this.resolveCurrentStagePack();
+      if (this.course && owningPack && (this.course as any).currentStagePackId == null) {
+        (this.course as any).currentStagePackId = packIdentity(owningPack);
+      }
       if (RANDO_DEBUG) {
-        console.log('rando: loadStage:', {
+        randoDebug('loadStage:', {
           id: stageId,
           gameSource: this.gameSource,
           basePath: this.stageBasePath,
           curSrc: (this.course as any)?.currentStageGameSource,
-          isPack: (this.course as any)?.currentStageIsPackStage,
+          isPack: (this.course as any)?.currentStageIsPackStage ?? (owningPack != null),
+          packId: owningPack ? packIdentity(owningPack) : null,
+          packName: owningPack?.manifest?.name ?? null,
           path: `${this.stageBasePath}/st${String(stageId).padStart(3, '0')}/STAGE${String(stageId).padStart(3, '0')}.lz`,
         });
       }
@@ -3387,7 +3439,11 @@ export class GameCore {
       this.stageStartRollbackState = this.saveRollbackState(this.stageStartRollbackState);
       this.captureStageViewRollbackState();
 
-      void this.audio?.playMusicForStage(stageId, this.gameSource);
+      const musicPackBase = getPackStageBasePath(this.gameSource);
+      const musicIsPackStage =
+        (this.course as any)?.currentStageIsPackStage === true ||
+        (musicPackBase !== null && this.stageBasePath === musicPackBase);
+      void this.audio?.playMusicForStage(stageId, this.gameSource, musicIsPackStage);
       this.statusText = '';
       this.updateHud();
       this.lastStageLoadFailed = false;
@@ -3396,7 +3452,7 @@ export class GameCore {
     } catch (err) {
       this.lastStageLoadFailed = true;
       if (RANDO_DEBUG) {
-        console.log('rando: loadStage FAILED:', {
+        randoDebug('loadStage FAILED:', {
           id: stageId,
           gameSource: this.gameSource,
           basePath: this.stageBasePath,
