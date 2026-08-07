@@ -121,8 +121,8 @@ import {
   packIdentity,
 } from './pack.js';
 import type { LoadedPack } from './pack.js';
-import { savePack as persistPackToStore, getAllPacks as getStoredPacks, deletePack as deletePackFromStore, type StoredPack } from './app/packs/pack_store.js';
-import { randoDebug } from './randomizer_state.js';
+import { savePack as persistPackToStore, getAllPacks as getStoredPacks } from './app/packs/pack_store.js';
+import { bindPackManageUi } from './app/packs/pack_manage_ui.js';
 import { isTotalRandomizerEnabled } from './randomizer_state.js';
 
 const LEADERBOARDS_MENU_ENABLED = false;
@@ -1688,10 +1688,6 @@ export function runMainApp() {
       packSelection.syncEnabled();
       courseSelection.updateGameSourceFields();
       courseSelection.updateSmb1Stages();
-      randoDebug('practice menu open: restored source', {
-        source: gameSourceSelect.value,
-        activePack: packSelection.getActivePackInfo()?.id ?? null,
-      });
     }
     updateLevelSelectMenuLabels();
     menuFlow.setActiveMenu('level-select');
@@ -1704,12 +1700,6 @@ export function runMainApp() {
         levelSelectPracticeSourceValue = gameSourceSelect.value;
       }
       const selection = buildSingleplayerSelectionFromLevelSelect();
-      randoDebug('practice start', {
-        source: gameSourceSelect?.value ?? null,
-        resolvedGameSource: selection.gameSource,
-        activePack: packSelection.getActivePackInfo()?.id ?? null,
-        courseConfig: selection.courseConfig,
-      });
       matchStartFlow?.startSingleplayerSelection(selection.gameSource, selection.courseConfig, {
         practiceMode: true,
         enableLeaderboardSession: false,

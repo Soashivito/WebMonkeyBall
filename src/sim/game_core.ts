@@ -2,9 +2,9 @@ import { Course } from '../course.js';
 import { Smb2Course, type Smb2CourseConfig } from '../course_smb2.js';
 import { Mb2wsCourse, type Mb2wsCourseConfig } from '../course_mb2ws.js';
 import { buildRandomizerPool, buildTotalRandomizerPool, ensureStagesVerified, ensurePackStagesVerified, RANDOMIZER_PACK_KEY } from '../app/gameplay/randomizer_pool.js';
-import { applyRandomizerPool, randomizerAdvanceCourse, markCurrentRandomizerStageVisited } from '../randomizer_core.js';
-import { isRandomizerEnabled, getRandomizerGroups, isTotalRandomizerEnabled, markStageRuntimeUnavailable, RANDO_DEBUG, randoDebug } from '../randomizer_state.js';
-import { getActivePack, hasPackForGameSource, getPackStageBasePath, getLoadedPackByIdentity, setActivePack, setPackEnabled, clearRenderPinnedPack, packIdentity } from '../pack.js';
+import { applyRandomizerPool, randomizerAdvanceCourse, markCurrentRandomizerStageVisited, applyHostRandomizerStage } from '../randomizer_core.js';
+import { isRandomizerEnabled, getRandomizerGroups, isTotalRandomizerEnabled, markStageRuntimeUnavailable } from '../randomizer_state.js';
+import { getActivePack, hasPackForGameSource, isPackStageContext, getLoadedPackByIdentity, setActivePack, setPackEnabled, clearRenderPinnedPack, packIdentity } from '../pack.js';
 import type { LoadedPack } from '../pack.js';
 import { loadGoalTapeAnchorY, loadStageDef, loadStageModelBounds, StageRuntime } from '../stage.js';
 import { SMB1_PARSER_ID } from '../stage/parse/parsers/smb1.js';
@@ -2337,11 +2337,6 @@ export class GameCore {
 
       const totalOn = isTotalRandomizerEnabled();
       if (this.practiceMode && (isRandomizerEnabled() || totalOn)) {
-        randoDebug('practice: randomizer pool skipped', {
-          stageId: (this.course as any)?.currentStageId,
-          gameSource: this.gameSource,
-          basePath: this.stageBasePath,
-        });
       }
       if (!this.practiceMode && (isRandomizerEnabled() || totalOn)) {
         try {
@@ -2450,20 +2445,11 @@ export class GameCore {
         this.stageBasePath = base;
       }
     }
+    //derive the parser from the source, a pack entry carries no parserId
     this.stageParserId = totalSrc === GAME_SOURCES.SMB1 ? SMB1_PARSER_ID : SMB2_PARSER_ID;
+    //same for the ruleset, we re-derive it here so the hud follows the stage
     this.stageRulesetId = totalSrc === GAME_SOURCES.SMB1 ? 'smb1' : 'smb2';
     this.ruleset = getRulesetById(this.stageRulesetId);
-    if (RANDO_DEBUG) {
-      randoDebug('source switch:', {
-        id: (this.course as any)?.currentStageId,
-        curSrc: totalSrc,
-        gameSource: this.gameSource,
-        basePath: this.stageBasePath,
-        parserId: this.stageParserId,
-        isPack: isPackStage,
-        packId: (this.course as any)?.currentStagePackId ?? null,
-      });
-    }
   }
 
   private async loadRandomizerStage(stageId: number) {
@@ -3320,17 +3306,12 @@ export class GameCore {
       if (this.course && owningPack && (this.course as any).currentStagePackId == null) {
         (this.course as any).currentStagePackId = packIdentity(owningPack);
       }
-      if (RANDO_DEBUG) {
-        randoDebug('loadStage:', {
-          id: stageId,
-          gameSource: this.gameSource,
-          basePath: this.stageBasePath,
-          curSrc: (this.course as any)?.currentStageGameSource,
-          isPack: (this.course as any)?.currentStageIsPackStage ?? (owningPack != null),
-          packId: owningPack ? packIdentity(owningPack) : null,
-          packName: owningPack?.manifest?.name ?? null,
-          path: `${this.stageBasePath}/st${String(stageId).padStart(3, '0')}/STAGE${String(stageId).padStart(3, '0')}.lz`,
-        });
+      const randomizerActive = (isRandomizerEnabled() || isTotalRandomizerEnabled()) && !this.practiceMode;
+      if (randomizerActive && (this.course as any)?.currentStageIsPackStage === true) {
+        const stagePackId = (this.course as any)?.currentStagePackId as string | undefined;
+        if (!stagePackId || !getLoadedPackByIdentity(stagePackId)) {
+          throw new Error(`Stage ${stageId} belongs to pack ${stagePackId ?? 'unknown'}, which is no longer loaded.`);
+        }
       }
       const stage = await loadStageDef(stageId, this.stageBasePath, this.gameSource, this.stageParserId);
       if (loadToken !== this.loadToken) {
@@ -3451,13 +3432,6 @@ export class GameCore {
       this.emitSessionEvent('stage_loaded', { stageId });
     } catch (err) {
       this.lastStageLoadFailed = true;
-      if (RANDO_DEBUG) {
-        randoDebug('loadStage FAILED:', {
-          id: stageId,
-          gameSource: this.gameSource,
-          basePath: this.stageBasePath,
-        });
-      }
       this.statusText = `Failed to load stage ${stageId}.`;
       console.error(err);
       this.updateHud();

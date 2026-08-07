@@ -10,7 +10,8 @@ import {
 } from '../../course_mb2ws.js';
 import { GAME_SOURCES, STAGE_BASE_PATHS, type GameSource } from '../../shared/constants/index.js';
 import { getActivePack, getPackStageRules, getPackStageNameUnchecked, packStageHasModel, packStageHasStagedef, hasPackForGameSource, getAllLoadedPacks, setActivePack, setPackEnabled, isPackEnabled, packIdentity } from '../../pack.js';
-import { setVerifiedInstalledStages, getVerifiedInstalledStages, RANDO_DEBUG, randoDebug } from '../../randomizer_state.js';
+import { setVerifiedInstalledStages, getVerifiedInstalledStages } from '../../randomizer_state.js';
+import { isSmb1BonusStageId } from '../../randomizer_core.js';
 import { STAGE_INFO_MAP } from '../../noclip/SuperMonkeyBall/StageInfo.js';
 import { getSmb2StageInfo, getMb2wsStageInfo } from '../../smb2_render.js';
 
@@ -280,42 +281,11 @@ async function verifySourceStages(source: GameSource): Promise<void> {
   }
   if (!anyPresent) {
     setVerifiedInstalledStages(source, []);
-    if (RANDO_DEBUG) {
-      randoDebug(`verified ${source}: content folder appears absent, 0 stages`);
-    }
     return;
   }
-  const available: number[] = [];
-  const concurrency = Math.min(12, candidates.length);
-  let cursor = 0;
-  const runWorker = async (): Promise<void> => {
-    for (;;) {
-      const index = cursor;
-      cursor += 1;
-      if (index >= candidates.length) {
-        return;
-      }
-      const id = candidates[index];
-      const idStr = String(id).padStart(3, '0');
-      const hasStagedef = await baseFileExists(`${base}/st${idStr}/STAGE${idStr}.lz`);
-      if (!hasStagedef) {
-        continue;
-      }
-      const hasModel = await baseFileExists(`${base}/st${idStr}/st${idStr}.gma`);
-      if (hasModel) {
-        available.push(id);
-      }
-    }
-  };
-  const workers: Array<Promise<void>> = [];
-  for (let w = 0; w < concurrency; w += 1) {
-    workers.push(runWorker());
-  }
-  await Promise.all(workers);
+  const available = await probeStageIds(candidates, (id) => stageFilesExist(base, id, false));
   setVerifiedInstalledStages(source, available);
-  if (RANDO_DEBUG) {
-    randoDebug(`verified ${source}: ${available.length}/${candidates.length} present`, available.slice(0, 12));
-  }
+  writeCachedVerified(source, base, available);
 }
 
 let verificationPromise: Promise<void> | null = null;
@@ -457,7 +427,8 @@ export function buildTotalRandomizerPool(): RandomizerPool | null {
   };
 
   for (const group of SMB1_DIFFICULTIES) {
-    pushFrom(GAME_SOURCES.SMB1, getStageListForDifficulty(group.value), null, group.value);
+    const smb1List = getStageListForDifficulty(group.value);
+    pushFrom(GAME_SOURCES.SMB1, smb1List, smb1BonusFlags(smb1List), group.value);
   }
   for (const difficulty of listSmb2ChallengeDifficulties()) {
     const { stageList: list, bonusFlags: bf } = getSmb2ChallengeStageEntries(difficulty);
@@ -471,27 +442,17 @@ export function buildTotalRandomizerPool(): RandomizerPool | null {
   const allPacks = getAllLoadedPacks();
   const savedActivePack = getActivePack();
   const savedPackEnabled = isPackEnabled();
-  const packDebug: Array<Record<string, unknown>> = [];
   for (const pack of allPacks) {
     const identity = packIdentity(pack);
     const packSource = pack.manifest.gameSource;
     setActivePack(pack);
     setPackEnabled(true);
     const entries = packStageEntries();
-    if (RANDO_DEBUG) {
-      const declared: number[] = pack.manifest?.content?.stages ?? [];
-      packDebug.push({
-        name: pack.manifest?.name,
-        identity,
-        source: packSource,
-        declared: declared.length,
-        entries: entries.length,
-      });
-    }
     entries.forEach((entry) => {
       if (entry == null || typeof entry.id !== 'number') {
         return;
       }
+      //key by pack identity and id, so two packs sharing a stage number keep both
       const key = `pack:${identity}:${entry.id}`;
       if (seen.has(key)) {
         return;
@@ -504,22 +465,7 @@ export function buildTotalRandomizerPool(): RandomizerPool | null {
   setActivePack(savedActivePack);
   setPackEnabled(savedPackEnabled);
 
-  if (RANDO_DEBUG) {
-    if (allPacks.length === 0) {
-      randoDebug('pack append: no packs loaded (load a pack so its stages enter the pool)');
-    } else {
-      randoDebug('pack append:', { packs: allPacks.length, perPack: packDebug });
-    }
-  }
 
-  if (RANDO_DEBUG) {
-    const bySource: Record<string, number> = {};
-    for (const entry of stageList) {
-      const dbgKey = entry.packStage ? `pack:${entry.packId}` : entry.gameSource;
-      bySource[dbgKey] = (bySource[dbgKey] ?? 0) + 1;
-    }
-    randoDebug('total pool built:', { count: stageList.length, packs: allPacks.length, bySource });
-  }
 
   return stageList.length > 0 ? { stageList, bonusFlags } : null;
 }

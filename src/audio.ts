@@ -2,7 +2,6 @@ import { COLI_FLAGS, GAME_SOURCES, type GameSource } from './shared/constants/in
 import { getMb2wsStageInfo, getSmb2StageInfo } from './smb2_render.js';
 import { STAGE_INFO_MAP } from './noclip/SuperMonkeyBall/StageInfo.js';
 import { getPackStageEnvUnchecked } from './pack.js';
-import { randoDebug } from './randomizer_state.js';
 
 const AUDIO_BASE_PATH = './audio';
 const SFX_DIR = 'sfx';
@@ -52,6 +51,7 @@ const SMB2_BG_MUSIC: Record<string, string> = {
   bg_spa2: 'colony',
   bg_ele2: 'badboon',
   bg_bns2: 'bonus',
+  //smb2 backgrounds only, names shared with smb1 like bg_ice stay out on purpose
   bg_lav: 'volcano',
   bg_au_bub2: 'washingmachine',
   bg_au_gea2: 'clocktower',
@@ -221,7 +221,6 @@ export class AudioManager {
       return;
     }
     const { track, musicSource } = this.resolveMusicTrack(bgFile, gameSource);
-    randoDebug('music:', { stageId, gameSource, isPack: isPackStage, bgFile, track, musicSource });
     const ctx = await this.ensureContext();
     const musicKey = `${musicSource}:${track}`;
     if (this.currentMusicKey === musicKey) {
@@ -548,6 +547,7 @@ export class AudioManager {
     return pool;
   }
 
+  //fnv-1a, so every client picks the same track for a background
   private hashStringToIndex(value: string, size: number): number {
     let hash = 0x811c9dc5;
     for (let i = 0; i < value.length; i += 1) {
