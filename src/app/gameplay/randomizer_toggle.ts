@@ -1,6 +1,6 @@
 
-import { listRandomizerGroups, RANDOMIZER_PACK_KEY } from './randomizer_pool.js';
-import { setRandomizerEnabled, setRandomizerGroups, isRandomizerEnabled, setTotalRandomizerEnabled } from '../../randomizer_state.js';
+import { listRandomizerGroups, ensureStagesVerified, RANDOMIZER_PACK_KEY } from './randomizer_pool.js';
+import { setRandomizerEnabled, setRandomizerGroups, isRandomizerEnabled, setTotalRandomizerEnabled, isTotalRandomizerEnabled } from '../../randomizer_state.js';
 import { getActivePack } from '../../pack.js';
 import { GAME_SOURCES, type GameSource } from '../../shared/constants/index.js';
 
@@ -33,6 +33,15 @@ function readStoredEnabled(): boolean {
   }
 }
 
+export function randomizerPersistedOn(): boolean {
+  try {
+    return window.localStorage.getItem(ENABLED_KEY) === '1'
+      || window.localStorage.getItem(TOTAL_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 function writeStoredEnabled(enabled: boolean) {
   try {
     window.localStorage.setItem(ENABLED_KEY, enabled ? '1' : '0');
@@ -60,6 +69,9 @@ function writeStoredDifficulties(map: Record<string, string[]>) {
 function setEnabledFlag(enabled: boolean) {
   setRandomizerEnabled(enabled);
   writeStoredEnabled(enabled);
+  if (enabled) {
+    void ensureStagesVerified();
+  }
   for (const id of ENABLE_CHECKBOX_IDS) {
     const box = document.getElementById(id) as HTMLInputElement | null;
     if (box && box.checked !== enabled) {

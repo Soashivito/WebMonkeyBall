@@ -11,6 +11,7 @@ import {
   type StageModelInstance,
 } from './noclip/SuperMonkeyBall/Stagedef.js';
 import { BgInfos, type StageInfo } from './noclip/SuperMonkeyBall/StageInfo.js';
+import { BgDummy } from './noclip/SuperMonkeyBall/Background.js';
 import { colorNewFromRGBA } from './noclip/Color.js';
 import { getPackStageEnv, hasPackForGameSource } from './pack.js';
 
@@ -746,15 +747,30 @@ function convertStageModelInstances(list: any[]): StageModelInstance[] {
   }));
 }
 
+export function hasSmb2StageInfo(stageId: number): boolean {
+  return SMB2_STAGE_THEME_IDS[stageId] !== undefined;
+}
+
+export function hasMb2wsStageInfo(stageId: number): boolean {
+  return MB2WS_STAGE_THEME_IDS[stageId] !== undefined;
+}
+
+function withUsableBgConstructor(bgInfo: StageInfo['bgInfo']): StageInfo['bgInfo'] {
+  if (typeof bgInfo.bgConstructor === 'function') {
+    return bgInfo;
+  }
+  return { ...bgInfo, bgConstructor: BgDummy };
+}
+
 export function getSmb2StageInfo(stageId: number, usePackEnv: boolean = true): StageInfo {
   const themeId = SMB2_STAGE_THEME_IDS[stageId] ?? 0;
   const fileName = SMB2_THEME_BG_NAMES[themeId] ?? '';
   const baseInfo = getDefaultSmb2BgInfo(themeId, fileName);
   return {
     id: stageId as any,
-    bgInfo: usePackEnv
+    bgInfo: withUsableBgConstructor(usePackEnv
       ? applyPackBgInfo(stageId, GAME_SOURCES.SMB2, baseInfo, fileName)
-      : { ...baseInfo, fileName },
+      : { ...baseInfo, fileName }),
   };
 }
 
@@ -764,9 +780,9 @@ export function getMb2wsStageInfo(stageId: number, usePackEnv: boolean = true): 
   const baseInfo = getDefaultSmb2BgInfo(themeId, fileName);
   return {
     id: stageId as any,
-    bgInfo: usePackEnv
+    bgInfo: withUsableBgConstructor(usePackEnv
       ? applyPackBgInfo(stageId, GAME_SOURCES.MB2WS, baseInfo, fileName)
-      : { ...baseInfo, fileName },
+      : { ...baseInfo, fileName }),
   };
 }
 

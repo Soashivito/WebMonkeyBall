@@ -16,10 +16,10 @@ import { getSmb2StageInfo, getMb2wsStageInfo } from '../../smb2_render.js';
 
 function stageLoadableForSource(source: GameSource, id: number): boolean {
   if (source === GAME_SOURCES.SMB2) {
-    return !!getSmb2StageInfo(id);
+    return hasSmb2StageInfo(id);
   }
   if (source === GAME_SOURCES.MB2WS) {
-    return !!getMb2wsStageInfo(id);
+    return hasMb2wsStageInfo(id);
   }
   return STAGE_INFO_MAP.has(id as never);
 }
@@ -51,10 +51,6 @@ function titleCase(value: string): string {
     .split('-')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
-}
-
-export function randomizerPackActive(gameSource: GameSource): boolean {
-  return hasPackForGameSource(gameSource);
 }
 
 export function listRandomizerGroups(gameSource: GameSource): RandomizerGroup[] {
@@ -155,6 +151,49 @@ async function baseFileExists(url: string): Promise<boolean> {
   }
 }
 
+async function probeStageIds(
+  ids: number[],
+  probe: (id: number) => Promise<boolean>,
+): Promise<number[]> {
+  const present: number[] = [];
+  let cursor = 0;
+  const runWorker = async (): Promise<void> => {
+    for (;;) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= ids.length) {
+        return;
+      }
+      const id = ids[index];
+      if (await probe(id)) {
+        present.push(id);
+      }
+    }
+  };
+  const workers: Array<Promise<void>> = [];
+  for (let w = 0; w < Math.min(12, ids.length); w += 1) {
+    workers.push(runWorker());
+  }
+  await Promise.all(workers);
+  return present;
+}
+
+//we probe the stagedef first, a missing stage costs one request
+//only packs check the model, no base candidate is missing one
+async function stageFilesExist(base: string, id: number, requireModel: boolean): Promise<boolean> {
+  if (!Number.isFinite(id)) {
+    return false;
+  }
+  const idStr = String(id).padStart(3, '0');
+  if (!(await baseFileExists(`${base}/st${idStr}/STAGE${idStr}.lz`))) {
+    return false;
+  }
+  if (!requireModel) {
+    return true;
+  }
+  return baseFileExists(`${base}/st${idStr}/st${idStr}.gma`);
+}
+
 function baseCandidateIds(source: GameSource): number[] {
   const ids = new Set<number>();
   const add = (entries: any[]) => {
@@ -180,10 +219,49 @@ function baseCandidateIds(source: GameSource): number[] {
   return [...ids];
 }
 
+//we cache the probe per source and base path, the build commit is in the key
+const VERIFIED_CACHE_PREFIX = 'wmb-verified:';
+
+declare const __APP_COMMIT__: string | undefined;
+
+function verifiedCacheKey(source: GameSource, base: string): string {
+  const commit = typeof __APP_COMMIT__ !== 'undefined' && __APP_COMMIT__ ? String(__APP_COMMIT__) : 'dev';
+  return `${VERIFIED_CACHE_PREFIX}${commit}:${source}:${base}`;
+}
+
+function readCachedVerified(source: GameSource, base: string): number[] | null {
+  try {
+    const raw = window.localStorage.getItem(verifiedCacheKey(source, base));
+    if (!raw) {
+      return null;
+    }
+    const ids = JSON.parse(raw);
+    //never reuse a cached empty list, we cant tell it from unmounted content
+    return Array.isArray(ids) && ids.length > 0 && ids.every((n) => typeof n === 'number') ? ids : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedVerified(source: GameSource, base: string, ids: number[]): void {
+  if (ids.length === 0) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(verifiedCacheKey(source, base), JSON.stringify(ids));
+  } catch {
+  }
+}
+
 async function verifySourceStages(source: GameSource): Promise<void> {
   const base = (STAGE_BASE_PATHS as Record<string, string>)[source];
   if (!base) {
     setVerifiedInstalledStages(source, []);
+    return;
+  }
+  const cached = readCachedVerified(source, base);
+  if (cached) {
+    setVerifiedInstalledStages(source, cached);
     return;
   }
   const candidates = baseCandidateIds(source);
@@ -257,52 +335,26 @@ let packVerifiedIds: Set<number> | null = null;
 let packVerifiedKey: string | null = null;
 let packVerificationPromise: Promise<void> | null = null;
 
-function activePackIdentity(pack: ReturnType<typeof getActivePack>): string {
-  return `${pack?.manifest?.gameSource ?? ''}|${(pack as any)?.basePath ?? ''}`;
-}
-
-async function verifyPackStages(pack: NonNullable<ReturnType<typeof getActivePack>>): Promise<void> {
+async function verifyPackStages(
+  pack: NonNullable<ReturnType<typeof getActivePack>>,
+  identity: string,
+): Promise<void> {
+  const commit = (ids: Set<number> | null) => {
+    if (packVerifiedKey === identity) {
+      packVerifiedIds = ids;
+    }
+  };
   if (pack.provider.has) {
-    packVerifiedIds = null;
+    commit(null);
     return;
   }
   const ids: number[] = pack.manifest?.content?.stages ?? [];
   if (!Array.isArray(ids) || ids.length === 0) {
-    packVerifiedIds = new Set<number>();
+    commit(new Set<number>());
     return;
   }
-  const base = String((pack as any).basePath ?? '').replace(/\/+$/, '');
-  const present: number[] = [];
-  const concurrency = Math.min(12, ids.length);
-  let cursor = 0;
-  const runWorker = async (): Promise<void> => {
-    for (;;) {
-      const index = cursor;
-      cursor += 1;
-      if (index >= ids.length) {
-        return;
-      }
-      const id = ids[index];
-      if (typeof id !== 'number' || !Number.isFinite(id)) {
-        continue;
-      }
-      const idStr = String(id).padStart(3, '0');
-      const hasStagedef = await baseFileExists(`${base}/st${idStr}/STAGE${idStr}.lz`);
-      if (!hasStagedef) {
-        continue;
-      }
-      const hasModel = await baseFileExists(`${base}/st${idStr}/st${idStr}.gma`);
-      if (hasModel) {
-        present.push(id);
-      }
-    }
-  };
-  const workers: Array<Promise<void>> = [];
-  for (let w = 0; w < concurrency; w += 1) {
-    workers.push(runWorker());
-  }
-  await Promise.all(workers);
-  packVerifiedIds = new Set(present);
+  const base = String(pack.basePath ?? '').replace(/\/+$/, '');
+  commit(new Set(await probeStageIds(ids, (id) => stageFilesExist(base, id, true))));
 }
 
 export function ensurePackStagesVerified(): Promise<void> {
