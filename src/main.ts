@@ -117,6 +117,8 @@ import {
   loadPackFromFileList,
   loadPackFromUrl,
   loadPackFromZipFile,
+  normalizeIdentity,
+  packIdentity,
 } from './pack.js';
 import type { LoadedPack } from './pack.js';
 import { savePack as persistPackToStore, getAllPacks as getStoredPacks, deletePack as deletePackFromStore, type StoredPack } from './app/packs/pack_store.js';
@@ -437,7 +439,7 @@ export function runMainApp() {
           }
           const file = new File([rec.bytes], `${rec.name || 'pack'}.zip`, { type: 'application/zip' });
           const pack = await loadPackFromZipFile(file);
-          packSelection.registerLoadedPack(pack);
+          packSelection.registerLoadedPackQuiet(pack);
         } catch (err) {
           console.warn('Pack store: failed to restore a pack.', err);
         }
@@ -484,7 +486,7 @@ export function runMainApp() {
       if (!id) {
         return;
       }
-      const key = id.replace(/\s+/g, '-').toLowerCase();
+      const key = normalizeIdentity(id);
       if (seen.has(key)) {
         return;
       }
@@ -522,7 +524,7 @@ export function runMainApp() {
     },
     persistPack: (pack, bytes) => {
       const info = packSelection.getActivePackInfo();
-      const identity = info?.id ?? (pack.manifest.id || pack.manifest.name || 'pack').replace(/\s+/g, '-').toLowerCase();
+      const identity = info?.id ?? packIdentity(pack);
       void persistPackToStore({
         identity,
         name: pack.manifest.name ?? 'Custom pack',
@@ -968,6 +970,7 @@ export function runMainApp() {
       profileFallbackForPlayer: presenceUi.profileFallbackForPlayer,
       packSelection,
       getMissingRoomPacks,
+      getRequiredPackIds: () => getRequiredPackInfos().map((entry) => entry.id),
       pendingSpawnStageSeq,
       handleHostDisconnect,
       leaderboardsClient,

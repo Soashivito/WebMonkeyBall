@@ -229,10 +229,6 @@ export function getPackStageEnv(stageId: number): PackStageEnv | null {
   return activePack.manifest.stageEnv[String(stageId)] ?? null;
 }
 
-export function hasActivePackForGameSource(gameSource: GameSource): boolean {
-  return activePack?.manifest.gameSource === gameSource;
-}
-
 export function getPackStageEnvUnchecked(stageId: number): PackStageEnv | null {
   if (!activePack?.manifest.stageEnv) {
     return null;
@@ -301,6 +297,18 @@ export function getPackStageBasePath(gameSource: GameSource): string | null {
 
 export function hasPackForGameSource(gameSource: GameSource): boolean {
   return !!packEnabled && activePack?.manifest.gameSource === gameSource;
+}
+
+export function isPackStageContext(
+  gameSource: GameSource,
+  stageBasePath: string | undefined,
+  courseMarkedPackStage: boolean | undefined,
+): boolean {
+  if (courseMarkedPackStage === true) {
+    return true;
+  }
+  const packBasePath = getPackStageBasePath(gameSource);
+  return packBasePath !== null && stageBasePath === packBasePath;
 }
 
 export async function fetchPackSlice(path: string): Promise<ArrayBufferSlice> {

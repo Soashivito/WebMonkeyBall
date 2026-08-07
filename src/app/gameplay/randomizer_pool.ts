@@ -313,7 +313,7 @@ export function ensurePackStagesVerified(): Promise<void> {
     packVerificationPromise = null;
     return Promise.resolve();
   }
-  const identity = activePackIdentity(pack);
+  const identity = packIdentity(pack);
   if (packVerifiedKey === identity && packVerificationPromise) {
     return packVerificationPromise;
   }

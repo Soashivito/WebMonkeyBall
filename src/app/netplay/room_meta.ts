@@ -74,8 +74,6 @@ export class RoomMetaController {
     const roomName = this.deps.sanitizeLobbyName(
       this.deps.lobbyRoomNameInput?.value ?? this.deps.getLobbyRoom()?.meta?.roomName ?? '',
     );
-    const requiredPacks = this.deps.getRequiredPackInfos();
-    const primaryPack = this.deps.getActivePackInfo() ?? requiredPacks[0] ?? null;
     return {
       status,
       gameSource,
@@ -85,6 +83,14 @@ export class RoomMetaController {
       stageLabel: labels.stageLabel,
       stageId,
       roomName: roomName ?? undefined,
+      ...this.buildPackMeta(),
+    };
+  }
+
+  private buildPackMeta(): Pick<RoomMeta, 'packId' | 'packName' | 'packIds' | 'packNames'> {
+    const requiredPacks = this.deps.getRequiredPackInfos();
+    const primaryPack = this.deps.getActivePackInfo() ?? requiredPacks[0] ?? null;
+    return {
       packId: primaryPack?.id,
       packName: primaryPack?.name,
       packIds: requiredPacks.length > 0 ? requiredPacks.map((entry) => entry.id) : undefined,
@@ -105,8 +111,6 @@ export class RoomMetaController {
     const roomName = this.deps.sanitizeLobbyName(this.deps.lobbyNameInput?.value ?? '');
     const gameMode = this.getLobbySelectedGameMode();
     const gameModeOptions = this.deps.getDefaultGameModeOptions(gameMode);
-    const requiredPacks = this.deps.getRequiredPackInfos();
-    const primaryPack = this.deps.getActivePackInfo() ?? requiredPacks[0] ?? null;
     return {
       status: 'lobby',
       gameSource,
@@ -115,10 +119,7 @@ export class RoomMetaController {
       courseLabel: labels.courseLabel,
       stageLabel: labels.stageLabel,
       roomName: roomName ?? undefined,
-      packId: primaryPack?.id,
-      packName: primaryPack?.name,
-      packIds: requiredPacks.length > 0 ? requiredPacks.map((entry) => entry.id) : undefined,
-      packNames: requiredPacks.length > 0 ? requiredPacks.map((entry) => entry.name) : undefined,
+      ...this.buildPackMeta(),
     };
   }
 }

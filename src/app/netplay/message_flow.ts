@@ -51,7 +51,7 @@ type MessageFlowDeps = {
   setLobbyRoom: (room: RoomInfo) => void;
   setActiveGameSource: (source: GameSource) => void;
   getStageBasePath: (source: GameSource) => string;
-  applyRoomPack?: (packId: string | undefined) => 'loaded' | 'not-required' | 'missing';
+  applyRoomPack?: (packIds: string[]) => 'loaded' | 'not-required' | 'missing';
   setCurrentSmb2LikeMode: (mode: string | null) => void;
   startStage: (course: any) => Promise<void>;
   sendSnapshotToClient: (playerId: number, frame?: number) => void;
@@ -514,7 +514,10 @@ export class NetplayMessageFlowController {
       }
       this.deps.promotePendingSpawns(msg.stageSeq);
       this.deps.setPendingSnapshot(null);
-      const packResult = this.deps.applyRoomPack?.((msg as { packId?: string }).packId) ?? 'not-required';
+      const requiredPacks = msg.packIds && msg.packIds.length > 0
+        ? msg.packIds
+        : (msg.packId ? [msg.packId] : []);
+      const packResult = this.deps.applyRoomPack?.(requiredPacks) ?? 'not-required';
       if (packResult === 'missing') {
         if (this.deps.lobbyStatus) {
           this.deps.lobbyStatus.textContent =
@@ -528,6 +531,7 @@ export class NetplayMessageFlowController {
       this.deps.game.setMultiplayerGameMode(mode);
       this.deps.applyGameModeOptionsToGame(mode, modeOptions);
       this.deps.game.stageBasePath = msg.stageBasePath ?? this.deps.getStageBasePath(msg.gameSource);
+      this.deps.game.setHostRandomizerStage(msg.stage ?? null);
       this.deps.setCurrentSmb2LikeMode(msg.gameSource !== 'smb1' && msg.course?.mode ? msg.course.mode : null);
       void this.deps.startStage(msg.course);
     }

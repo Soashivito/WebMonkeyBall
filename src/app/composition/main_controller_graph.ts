@@ -33,6 +33,7 @@ export function createMainControllerGraph(args: any) {
     profileFallbackForPlayer,
     packSelection,
     getMissingRoomPacks,
+    getRequiredPackIds,
     pendingSpawnStageSeq,
     handleHostDisconnect,
     leaderboardsClient,
@@ -222,6 +223,7 @@ const lobbyBrowser = new LobbyBrowserController({
 
 const peerSession = new PeerSessionController({
   getActivePackId: () => packSelection.getActivePackInfo()?.id,
+  getRequiredPackIds,
   lobbyClient,
   lobbyStatus,
   game,
@@ -697,14 +699,18 @@ snapshotFlow = new SnapshotFlowController({
   snapshotMismatchCooldownMs: NETPLAY_SNAPSHOT_MISMATCH_COOLDOWN_MS,
 });
 netplayMessageFlow = new NetplayMessageFlowController({
-  applyRoomPack: (packId) => {
-    if (!packId) {
+  applyRoomPack: (packIds) => {
+    const required = (packIds ?? []).filter((id) => !!id);
+    if (required.length === 0) {
       return 'not-required';
     }
-    if (packSelection.getActivePackInfo()?.id === packId) {
-      return 'loaded';
+    if (required.some((id) => !packSelection.hasPackIdentity(id))) {
+      return 'missing';
     }
-    return packSelection.selectPackByIdentity(packId) ? 'loaded' : 'missing';
+    if (required.length === 1 && packSelection.getActivePackInfo()?.id !== required[0]) {
+      return packSelection.selectPackByIdentity(required[0]) ? 'loaded' : 'missing';
+    }
+    return 'loaded';
   },
   game,
   lobbyStatus,
@@ -924,9 +930,13 @@ stageFlow = new StageFlowController({
     void prefetchPackSlice(path);
   },
   isNaomiStage,
+  onStageRenderFailed: (stageId) => {
+    void game.handleStageRenderFailure(stageId);
+  },
 });
 matchStartFlow = new MatchStartFlowController({
   getActivePackId: () => packSelection.getActivePackInfo()?.id,
+  getRequiredPackIds,
   game,
   audio,
   resumeButton,
