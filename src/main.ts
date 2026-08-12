@@ -1966,93 +1966,19 @@ export function runMainApp() {
     packFolderInput,
   });
 
-  const packManageButton = document.getElementById('pack-manage') as HTMLButtonElement | null;
-  const packManagePanel = document.getElementById('pack-manage-panel');
-  function downloadStoredPack(rec: StoredPack) {
-    try {
-      const blob = new Blob([rec.bytes], { type: 'application/zip' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const safeName = (rec.name || 'pack').replace(/[^a-z0-9_\-]+/gi, '_');
-      link.download = `${safeName}.zip`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (err) {
-      console.warn('Pack download failed.', err);
-    }
-  }
-  function refreshCourseUiAfterPackChange() {
-    packSelection.refreshUi();
-    courseSelection.updateSmb2ChallengeStages();
-    courseSelection.updateSmb2StoryOptions();
-    courseSelection.updateSmb1Stages();
-    courseSelection.updateGameSourceFields();
-    syncCoursePlaySourceOptions();
-    syncCoursePlaySourceSelection();
-  }
-  async function deleteStoredPack(identity: string) {
-    try {
-      await deletePackFromStore(identity);
-    } catch (err) {
-      console.warn('Pack delete failed.', err);
-    }
-    packSelection.removePack(identity);
-    refreshCourseUiAfterPackChange();
-    await rebuildPackManagePanel();
-  }
-  async function rebuildPackManagePanel() {
-    if (!packManagePanel) {
-      return;
-    }
-    packManagePanel.textContent = '';
-    let stored: StoredPack[] = [];
-    try {
-      stored = await getStoredPacks();
-    } catch (err) {
-      console.warn('Pack store: failed to list packs.', err);
-    }
-    if (stored.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'pack-status';
-      empty.textContent = 'No stored packs';
-      packManagePanel.appendChild(empty);
-      return;
-    }
-    for (const rec of stored) {
-      const row = document.createElement('div');
-      row.className = 'pack-manage-row';
-      const label = document.createElement('span');
-      label.className = 'pack-status';
-      label.textContent = `${rec.name} (${String(rec.gameSource).toUpperCase()})`;
-      const downloadButton = document.createElement('button');
-      downloadButton.className = 'ghost compact';
-      downloadButton.type = 'button';
-      downloadButton.textContent = 'Download';
-      downloadButton.addEventListener('click', () => downloadStoredPack(rec));
-      const deleteButton = document.createElement('button');
-      deleteButton.className = 'ghost compact';
-      deleteButton.type = 'button';
-      deleteButton.textContent = 'Delete';
-      deleteButton.addEventListener('click', () => {
-        void deleteStoredPack(rec.identity);
-      });
-      row.append(label, downloadButton, deleteButton);
-      packManagePanel.appendChild(row);
-    }
-  }
-  if (packManageButton && packManagePanel) {
-    packManageButton.addEventListener('click', () => {
-      const willShow = packManagePanel.classList.contains('hidden');
-      packManagePanel.classList.toggle('hidden');
-      if (willShow) {
-        void rebuildPackManagePanel();
-      }
-    });
-  }
-  
+  bindPackManageUi({
+    onPackRemoved: (identity) => {
+      packSelection.removePack(identity);
+      packSelection.refreshUi();
+      courseSelection.updateSmb2ChallengeStages();
+      courseSelection.updateSmb2StoryOptions();
+      courseSelection.updateSmb1Stages();
+      courseSelection.updateGameSourceFields();
+      syncCoursePlaySourceOptions();
+      syncCoursePlaySourceSelection();
+    },
+  });
+
   replayController.bindReplayUi();
   
   bindMainUiControls({
@@ -2144,7 +2070,7 @@ export function runMainApp() {
       interpolationEnabled = enabled;
     },
   });
-  
+
   initRandomizerToggle();
 
   bindUiEventHandlers({
