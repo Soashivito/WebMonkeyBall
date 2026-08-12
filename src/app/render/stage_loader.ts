@@ -73,7 +73,7 @@ export class StageLoader {
     const isNaomi = this.isNaomiStage(stageId);
     const stageNlObjPath = isNaomi ? `${stageBasePath}/st${stageIdStr}/st${stageIdStr}_p.lz` : null;
     const stageNlTplPath = isNaomi ? `${stageBasePath}/st${stageIdStr}/st${stageIdStr}.lz` : null;
-    const smb2BasePath = STAGE_BASE_PATHS[GAME_SOURCES.SMB2];
+    const smb2BasePath = this.getStageBasePath(GAME_SOURCES.SMB2);
     const goalTimerGmaPromise: Promise<Gma.Gma | null> =
       (async () => {
         if (!smb2BasePath) {
