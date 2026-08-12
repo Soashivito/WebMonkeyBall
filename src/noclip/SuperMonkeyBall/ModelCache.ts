@@ -86,10 +86,7 @@ export class ModelCache {
         const usesSmb2Models = stageData.gameSource === "smb2" || stageData.gameSource === "mb2ws";
         if (usesSmb2Models) {
             this.blueGoalModel = this.findModelBySubstring(["GOAL_B", "GOAL"]);
-            /* SMB2/MB2WS common.gma often ships a single "GOAL" model and no
-               separate GOAL_G/GOAL_R. Falling back to the blue/GOAL model keeps
-               green and red goals from resolving to null, which otherwise threw
-               Missing object in the Goal renderer and broke any such stage. */
+            //a pack can ship a colored goal with no model, we use the blue mesh so the stage still loads
             this.greenGoalModel = this.findModelBySubstring(["GOAL_G"]) ?? this.blueGoalModel;
             this.redGoalModel = this.findModelBySubstring(["GOAL_R"]) ?? this.blueGoalModel;
         } else {
@@ -97,12 +94,7 @@ export class ModelCache {
             this.greenGoalModel = this.findBgSpecificModel("GOAL_G");
             this.redGoalModel = this.findBgSpecificModel("GOAL_R");
         }
-        /* SMB2 keeps the bumper model in the background gma, but a pack stage may
-           reference a background it does not ship (or none at all), leaving the
-           bg specific BUMPER_L1 lookup empty. Fall back to the common bumper so a
-           pack stage with bumpers does not throw Missing object and break. */
-        this.bumperModel =
-            this.findBgSpecificModel("BUMPER_L1") ?? this.getModel(CommonModelID.mb_bumper, GmaSrc.Common);
+        this.bumperModel = this.findBgSpecificModel("BUMPER_L1");
         this.jamabarModel =
             this.findModelBySubstring(["JAMABAR"]) ?? this.getModel(CommonModelID.mb_jamabar, GmaSrc.Common);
         if (usesSmb2Models) {
