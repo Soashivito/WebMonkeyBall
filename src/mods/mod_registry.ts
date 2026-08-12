@@ -1,4 +1,4 @@
-import type { GamemodeRegistration, GamemodeOptionDefinition, ModHooks, ModManifest, ParserRegistration, RulesetRegistration } from './mod_types.js';
+import type { GamemodeRegistration, ModHooks, ModManifest, ParserRegistration, RulesetRegistration } from './mod_types.js';
 import type { GamemodeId, ModId, ParserId, RulesetId } from '../shared/ids.js';
 import type { Ruleset } from '../rules/ruleset.js';
 import { registerRuleset } from '../rules/index.js';
@@ -59,27 +59,6 @@ export class ModRegistry {
       }
     }
     this.gamemodes.set(entry.id, entry);
-  }
-
-  extendGamemodeOptions(modeId: GamemodeId, options: GamemodeOptionDefinition[]): void {
-    const mode = this.gamemodes.get(modeId);
-    if (!mode) {
-      throw new Error(`Cannot extend options for unknown gamemode: ${modeId}`);
-    }
-    const existing = Array.isArray(mode.options) ? [...mode.options] : [];
-    const keys = new Set(existing.map((option) => option.key));
-    for (const option of options) {
-      const key = typeof option?.key === 'string' ? option.key.trim() : '';
-      if (!key) {
-        throw new Error(`Gamemode option key missing while extending mode: ${modeId}`);
-      }
-      if (keys.has(key)) {
-        continue;
-      }
-      keys.add(key);
-      existing.push(option);
-    }
-    this.gamemodes.set(modeId, { ...mode, options: existing });
   }
 
   registerHooks(hooks: ModHooks): void {
