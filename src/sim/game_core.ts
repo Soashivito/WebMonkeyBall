@@ -3420,10 +3420,11 @@ export class GameCore {
       this.stageStartRollbackState = this.saveRollbackState(this.stageStartRollbackState);
       this.captureStageViewRollbackState();
 
-      const musicPackBase = getPackStageBasePath(this.gameSource);
-      const musicIsPackStage =
-        (this.course as any)?.currentStageIsPackStage === true ||
-        (musicPackBase !== null && this.stageBasePath === musicPackBase);
+      const musicIsPackStage = isPackStageContext(
+        this.gameSource,
+        this.stageBasePath,
+        (this.course as any)?.currentStageIsPackStage,
+      );
       void this.audio?.playMusicForStage(stageId, this.gameSource, musicIsPackStage);
       this.statusText = '';
       this.updateHud();
