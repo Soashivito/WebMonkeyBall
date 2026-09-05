@@ -3327,6 +3327,11 @@ export class GameCore {
         console.warn('Failed to load goal tape model origin.', err);
       }
 
+      //a stage with no goal cant be finished, we fail the load so recovery drops it
+      if (randomizerActive && !(Array.isArray(stage.goals) && stage.goals.length > 0)) {
+        throw new Error(`Stage ${stageId} has no goal; retiring it from the randomizer pool.`);
+      }
+
       this.stage = stage;
       this.stageAttempts = isRestart ? this.stageAttempts + 1 : 1;
       this.stageRuntime = new StageRuntime(stage, undefined, this.stageRulesetId ?? undefined);
