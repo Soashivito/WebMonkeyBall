@@ -1,5 +1,5 @@
 import { GAME_SOURCES, INFO_FLAGS, type GameSource } from './shared/constants/index.js';
-import { getPackStageNameUnchecked, getPackStageBasePath } from './pack.js';
+import { getPackStageNameUnchecked, isPackStageContext, getLoadedPackByIdentity } from './pack.js';
 import { getStageNameForSource } from './stage_names.js';
 
 const HUD_WIDTH = 640;
@@ -555,6 +555,67 @@ function getSmb2StageLabelSurface(
   return surface;
 }
 
+const smb2RainbowScratch: HTMLCanvasElement | null =
+  typeof document !== 'undefined' ? document.createElement('canvas') : null;
+
+function drawSmb2RainbowLabel(
+  ctx: CanvasRenderingContext2D,
+  font: SpriteFont,
+  text: string,
+  left: number,
+  top: number,
+  scale: number,
+  phase: number,
+) {
+  const surface = getSmb2StageLabelSurface(font, text, scale, '#ffffff', '#000000');
+  if (!surface || !smb2RainbowScratch) {
+    drawTextAtWithSmb2Border(ctx, font, text, left, top, scale, '#ffffff', '#000000');
+    return;
+  }
+  const width = surface.canvas.width;
+  const height = surface.canvas.height;
+  if (smb2RainbowScratch.width !== width || smb2RainbowScratch.height !== height) {
+    smb2RainbowScratch.width = width;
+    smb2RainbowScratch.height = height;
+  }
+  const scratch = smb2RainbowScratch.getContext('2d');
+  if (!scratch) {
+    ctx.drawImage(surface.canvas, left + surface.offsetX, top + surface.offsetY);
+    return;
+  }
+  scratch.globalCompositeOperation = 'source-over';
+  scratch.clearRect(0, 0, width, height);
+  scratch.drawImage(surface.canvas, 0, 0);
+  const band = Math.max(1, width);
+  const shift = (((phase % 1) + 1) % 1) * band;
+  const gradient = scratch.createLinearGradient(-shift, 0, band * 2 - shift, 0);
+  for (let i = 0; i <= 12; i += 1) {
+    gradient.addColorStop(i / 12, `hsl(${Math.round((i / 12) * 720)}, 100%, 62%)`);
+  }
+  scratch.globalCompositeOperation = 'multiply';
+  scratch.fillStyle = gradient;
+  scratch.fillRect(0, 0, width, height);
+  scratch.globalCompositeOperation = 'destination-in';
+  scratch.drawImage(surface.canvas, 0, 0);
+  scratch.globalCompositeOperation = 'source-over';
+  ctx.drawImage(smb2RainbowScratch, left + surface.offsetX, top + surface.offsetY);
+}
+
+function getPackHudSubtitle(game: any): string | null {
+  const course = game?.course;
+  const packId = course?.currentStagePackId as string | undefined;
+  const pack = packId ? getLoadedPackByIdentity(packId) : null;
+  if (!pack) {
+    return null;
+  }
+  const stageId = Math.trunc(Number(game?.stage?.stageId ?? course?.currentStageId ?? 0));
+  if (!Number.isFinite(stageId) || stageId <= 0) {
+    return null;
+  }
+  const name = String(pack.manifest.name ?? 'CUSTOM PACK').toUpperCase();
+  return `${name} - ST ${String(stageId).padStart(3, '0')}`;
+}
+
 function drawSmb2StageLabelCached(
   ctx: CanvasRenderingContext2D,
   font: SpriteFont,
@@ -949,10 +1010,11 @@ function getSmb2ChallengeDifficulty(game: any, floorInfo: any): 'beginner' | 'ad
 function getSmb2StageNameText(game: any, floorInfo: any, maxLength: number): string {
   const stageId = Math.max(0, Math.trunc(game?.stage?.stageId ?? game?.course?.currentStageId ?? 0));
   const activeGameSource = game?.gameSource === GAME_SOURCES.MB2WS ? GAME_SOURCES.MB2WS : GAME_SOURCES.SMB2;
-  const packBasePath = getPackStageBasePath(activeGameSource);
-  const isPackStage =
-    Boolean(game?.course?.currentStageIsPackStage) ||
-    (packBasePath !== null && game?.stageBasePath === packBasePath);
+  const isPackStage = isPackStageContext(
+    activeGameSource,
+    game?.stageBasePath,
+    game?.course?.currentStageIsPackStage,
+  );
   const packName = isPackStage ? getPackStageNameUnchecked(stageId) : null;
   if (packName) {
     const text = packName.toUpperCase();
@@ -1900,6 +1962,10 @@ export class HudRenderer {
       drawTextAt(ctx, smb2Fonts.numSpeed, stageNumberText, stageNumberX + 3, 443, 1, '#000000', 0.5);
       drawTextAt(ctx, smb2Fonts.numSpeed, stageNumberText, stageNumberX, 440, 1, '#ffff00');
       drawSmb2StageLabelCached(ctx, smb2Fonts.asc24, stageNameText, stageLabelX, 440, 0.7, '#ffff00', '#000000');
+      const packSubtitle = getPackHudSubtitle(game);
+      if (packSubtitle) {
+        drawSmb2RainbowLabel(ctx, smb2Fonts.asc24, packSubtitle, stageLabelX, 458, 0.45, this.frameCounter * 0.006);
+      }
 
       drawSpriteTopLeft(ctx, smb2.bananaFrame, bananaCounterX, bananaCounterY, 1);
       drawSpriteTopLeft(ctx, smb2.bananaIcon, bananaCounterX - 2, bananaCounterY - 2, 1);
