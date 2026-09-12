@@ -23,6 +23,7 @@ type StartFlowDeps = {
   setCurrentSmb2LikeMode: (mode: 'story' | 'challenge' | null) => void;
   getStageBasePath: (gameSource: GameSource) => string;
   getActivePackId?: () => string | undefined;
+  getRequiredPackIds?: () => string[];
   buildSmb1CourseConfig: () => { difficulty: string; stageIndex: number };
   buildSmb2CourseConfig: () => any;
   buildMb2wsCourseConfig: () => any;
@@ -37,6 +38,19 @@ type StartFlowDeps = {
   clearLeaderboardSession: () => void;
   modeStandard: MultiplayerGameMode;
 };
+
+export function describeHostFloor(course: any): { floor?: number; total?: number; difficulty?: string } {
+  const info = course?.getFloorInfo?.();
+  if (!info || !Number.isFinite(info.current)) {
+    return {};
+  }
+  const difficulty = course?.stageList?.[course.stageIndex]?.difficulty ?? course?.difficulty;
+  return {
+    floor: info.current,
+    total: Number.isFinite(info.total) ? info.total : undefined,
+    difficulty: typeof difficulty === 'string' ? difficulty : undefined,
+  };
+}
 
 export class MatchStartFlowController {
   private readonly deps: StartFlowDeps;
@@ -161,6 +175,17 @@ export class MatchStartFlowController {
     const gameModeOptions = this.deps.getLobbyRoomGameModeOptions();
     netplayState.stageSeq += 1;
     this.deps.promotePendingSpawns(netplayState.stageSeq);
+    const hostCourse = this.deps.game.course as any;
+    const randomizerStage = typeof hostCourse?.currentStageGameSource === 'string'
+      && typeof hostCourse?.currentStageId === 'number'
+      ? {
+        id: hostCourse.currentStageId as number,
+        gameSource: hostCourse.currentStageGameSource as GameSource,
+        isPack: hostCourse.currentStageIsPackStage === true,
+        packId: hostCourse.currentStagePackId as string | undefined,
+        ...describeHostFloor(hostCourse),
+      }
+      : undefined;
     hostRelay.broadcast({
       type: 'start',
       stageSeq: netplayState.stageSeq,
@@ -169,7 +194,9 @@ export class MatchStartFlowController {
       gameModeOptions: Object.keys(gameModeOptions).length > 0 ? gameModeOptions : undefined,
       course: config,
       stageBasePath: this.deps.getStageBasePath(activeGameSource),
+      stage: randomizerStage,
       packId: this.deps.getActivePackId?.(),
+      packIds: this.deps.getRequiredPackIds?.(),
     });
   }
 

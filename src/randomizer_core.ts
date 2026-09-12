@@ -125,8 +125,36 @@ export function applyRandomizerPool(
   if (Array.isArray(bonusFlags)) {
     course.bonusFlags = bonusFlags;
   }
-  course.__randomizerVisited = null;
-  setCourseStage(course, 0);
+  course.__randomizerVisited = new Set<number>();
+  const start = pickRandomizerStartIndex(course);
+  if (start === null) {
+    setCourseStage(course, 0);
+    return;
+  }
+  course.__randomizerVisited.add(start);
+  setCourseStage(course, start);
+}
+
+export function applyHostRandomizerStage(
+  course: RandomizerCourse,
+  stage: {
+    id: number;
+    gameSource: string;
+    isPack?: boolean;
+    packId?: string;
+    floor?: number;
+    total?: number;
+    difficulty?: string;
+  },
+) {
+  course.currentStageId = stage.id;
+  course.currentStageGameSource = stage.gameSource;
+  course.currentStageIsPackStage = stage.isPack === true;
+  course.currentStagePackId = stage.isPack === true ? stage.packId : undefined;
+  course.currentStageName = '';
+  (course as any).hostFloorOverride = Number.isFinite(stage.floor)
+    ? { current: stage.floor, total: stage.total, difficulty: stage.difficulty }
+    : null;
 }
 
 export function randomizerEnabled(): boolean {

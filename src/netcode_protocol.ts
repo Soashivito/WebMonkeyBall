@@ -179,6 +179,17 @@ export type StartMatchMessage = {
   gameModeOptions?: RoomGameModeOptions;
   course: any;
   stageBasePath?: string;
+  stage?: {
+    id: number;
+    gameSource: GameSource;
+    isPack?: boolean;
+    packId?: string;
+    floor?: number;
+    total?: number;
+    difficulty?: string;
+  };
+  packId?: string;
+  packIds?: string[];
   lateJoin?: boolean;
 };
 

@@ -281,9 +281,13 @@ export class Course {
   }
 
   getFloorInfo() {
-    const total = this.stageList.length;
-    const current = this.currentFloor;
-    const activeDifficulty = this.stageList[this.stageIndex]?.difficulty ?? this.difficulty;
+    const hostFloor = (this as any).hostFloorOverride as
+      { current?: number; total?: number; difficulty?: string } | null | undefined;
+    const total = hostFloor?.total ?? this.stageList.length;
+    const current = hostFloor?.current ?? this.currentFloor;
+    const activeDifficulty = hostFloor?.difficulty
+      ?? this.stageList[this.stageIndex]?.difficulty
+      ?? this.difficulty;
     let prefix = 'FLOOR';
     if (typeof activeDifficulty === 'string') {
       if (activeDifficulty === 'master') {
