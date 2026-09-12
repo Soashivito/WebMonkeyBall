@@ -7,7 +7,7 @@ export type StoredPack = {
   identity: string;
   name: string;
   gameSource: string;
-  bytes: ArrayBuffer;
+  bytes: Blob;
   updatedAt: number;
 };
 
@@ -32,6 +32,7 @@ export async function savePack(record: StoredPack): Promise<void> {
     tx.objectStore(STORE).put(record, record.identity);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
   db.close();
 }
@@ -64,6 +65,7 @@ export async function deletePack(identity: string): Promise<void> {
     tx.objectStore(STORE).delete(identity);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
   db.close();
 }

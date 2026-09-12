@@ -529,7 +529,7 @@ export function runMainApp() {
         identity,
         name: pack.manifest.name ?? 'Custom pack',
         gameSource: pack.manifest.gameSource,
-        bytes,
+        bytes: new Blob([bytes], { type: 'application/zip' }),
         updatedAt: Date.now(),
       }).catch((err) => console.warn('Pack store: failed to persist pack.', err));
     },
