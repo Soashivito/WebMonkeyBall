@@ -14,6 +14,7 @@ import {
   resolveSignalCloseDisconnectReason,
   type LobbyDisconnectReason,
 } from './disconnect_reasons.js';
+import { describeHostFloor } from '../gameplay/start_flow.js';
 
 type NetplayState = {
   role: 'host' | 'client';
@@ -69,6 +70,7 @@ type PeerSessionDeps = {
   maybeSendStageSync: () => void;
   getStageBasePath: (source: GameSource) => string;
   getActivePackId?: () => string | undefined;
+  getRequiredPackIds?: () => string[];
   sendSnapshotToClient: (playerId: number) => void;
   broadcastRoomUpdate: () => void;
   sendLobbyHeartbeat: (nowMs: number, force?: boolean) => void;
@@ -219,6 +221,17 @@ export class PeerSessionController {
       if (liveState.currentCourse && liveState.currentGameSource) {
         const liveMode = this.deps.normalizeMultiplayerGameMode(liveState.currentGameMode);
         const liveModeOptions = this.deps.getRoomGameModeOptions(this.deps.getLobbyRoom() ?? nextRoom, liveMode);
+        const liveCourse = this.deps.game.course as any;
+        const liveRandomizerStage = typeof liveCourse?.currentStageGameSource === 'string'
+          && typeof liveCourse?.currentStageId === 'number'
+          ? {
+            id: liveCourse.currentStageId as number,
+            gameSource: liveCourse.currentStageGameSource as GameSource,
+            isPack: liveCourse.currentStageIsPackStage === true,
+            packId: liveCourse.currentStagePackId as string | undefined,
+            ...describeHostFloor(liveCourse),
+          }
+          : undefined;
         hostRelay.sendTo(playerId, {
           type: 'start',
           stageSeq: liveState.stageSeq,
@@ -227,7 +240,9 @@ export class PeerSessionController {
           gameModeOptions: Object.keys(liveModeOptions).length > 0 ? liveModeOptions : undefined,
           course: liveState.currentCourse,
           stageBasePath: this.deps.getStageBasePath(liveState.currentGameSource),
+          stage: liveRandomizerStage,
           packId: this.deps.getActivePackId?.(),
+          packIds: this.deps.getRequiredPackIds?.(),
           lateJoin: joinAsSpectator,
         });
       }
