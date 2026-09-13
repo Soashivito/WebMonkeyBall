@@ -312,6 +312,7 @@ export class GameCore {
   public gameSource: GameSource;
   private lastStageLoadFailed = false;
   private randomizerRecoveryFailures = 0;
+  private hostRandomizerStage: { id: number; gameSource: GameSource; isPack?: boolean; packId?: string } | null = null;
   public stageParserId: string | null;
   public stageRulesetId: string | null;
   public audio: AudioManager | null;
@@ -2370,6 +2371,10 @@ export class GameCore {
       return;
     }
 
+    if (this.hostRandomizerStage && this.course) {
+      applyHostRandomizerStage(this.course as any, this.hostRandomizerStage);
+    }
+
     if (this.course) {
       this.stageParserId = (this.course as any).currentStageParserId ?? this.stageParserId;
       this.stageRulesetId = (this.course as any).currentStageRulesetId ?? this.stageRulesetId;
@@ -2454,6 +2459,22 @@ export class GameCore {
 
   private async loadRandomizerStage(stageId: number) {
     await this.loadStage(stageId);
+    await this.recoverFromFailedRandomizerStage();
+  }
+
+  public setHostRandomizerStage(stage: { id: number; gameSource: GameSource; isPack?: boolean; packId?: string } | null) {
+    this.hostRandomizerStage = stage;
+  }
+
+  public async handleStageRenderFailure(stageId: number) {
+    if ((this.course as any)?.currentStageId !== stageId) {
+      return;
+    }
+    this.lastStageLoadFailed = true;
+    await this.recoverFromFailedRandomizerStage();
+  }
+
+  private async recoverFromFailedRandomizerStage() {
     if (!this.lastStageLoadFailed) {
       this.randomizerRecoveryFailures = 0;
       return;
