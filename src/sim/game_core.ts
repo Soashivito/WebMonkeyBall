@@ -28,7 +28,7 @@ import {
 } from '../collision.js';
 import { MatrixStack, sqrt, toS16 } from '../math.js';
 import { GameplayCamera } from '../camera.js';
-import { dequantizeStick, quantizeInput, quantizeStick, type QuantizedInput, type QuantizedStick } from '../determinism.js';
+import { BUTTON_PRIMARY, BUTTON_RESPAWN, dequantizeStick, quantizeInput, quantizeStick, type QuantizedInput, type QuantizedStick } from '../determinism.js';
 import { createReplayData, type ReplayData } from '../replay.js';
 import { RollbackSession } from '../rollback.js';
 import { spawnBonusShotStar } from '../effects.js';
@@ -101,6 +101,7 @@ const RESULT_REPLAY_SKIP_DELAY_FRAMES = 30;
 const RESULT_REPLAY_MIN_FRAMES = 30;
 const PLAYER_NO_COLLIDE_CLEAR_EPS = 0.02;
 const RINGOUT_SKIP_DELAY_FRAMES = 60;
+const RESPAWN_REQUEST_FRAMES = 24;
 const RINGOUT_STATUS_TEXT = 'Fall out!';
 const TIMEOVER_TOTAL_FRAMES = 120;
 const TIMEOVER_STATUS_TEXT = 'Time over!';
@@ -309,6 +310,8 @@ export class GameCore {
   }) => void;
   public onCourseComplete?: (info: { flags: number; goalType: string | null; timerCurr: number; u_currStageId: number }) => void;
   public stageBasePath: string;
+  public respawnButtonEnabled = false;
+  public falloutSkipEnabled = false;
   public gameSource: GameSource;
   private lastStageLoadFailed = false;
   private randomizerRecoveryFailures = 0;
@@ -780,6 +783,7 @@ export class GameCore {
         respawnTimerFrames: 0,
         ringoutTimerFrames: 0,
         ringoutSkipTimerFrames: 0,
+        prevButtons: 0,
       },
     ];
     this.invalidatePlayersSortedCache();
@@ -1080,6 +1084,7 @@ export class GameCore {
       outPlayer.respawnTimerFrames = player.respawnTimerFrames;
       outPlayer.ringoutTimerFrames = player.ringoutTimerFrames;
       outPlayer.ringoutSkipTimerFrames = player.ringoutSkipTimerFrames;
+      outPlayer.prevButtons = player.prevButtons;
       outPlayer.cameraRotY = player.cameraRotY;
       outPlayer.camera = player.camera?.writeState?.(outPlayer.camera ?? null) ?? null;
       outPlayer.world = cloneWorldState(player.world, outPlayer.world);
@@ -1415,6 +1420,7 @@ export class GameCore {
         player.respawnTimerFrames = saved.respawnTimerFrames ?? 0;
         player.ringoutTimerFrames = saved.ringoutTimerFrames ?? 0;
         player.ringoutSkipTimerFrames = saved.ringoutSkipTimerFrames ?? 0;
+        player.prevButtons = saved.prevButtons ?? 0;
         player.cameraRotY = saved.cameraRotY ?? 0;
         if (saved.camera && player.camera) {
           player.camera.setState(saved.camera);
@@ -2145,6 +2151,7 @@ export class GameCore {
       respawnTimerFrames: 0,
       ringoutTimerFrames: 0,
       ringoutSkipTimerFrames: 0,
+      prevButtons: 0,
     };
     if (hasActiveStage && !pendingSpawn && !spectator) {
       const start = this.stage?.startPositions?.[0];
@@ -3764,8 +3771,8 @@ export class GameCore {
     }
     const canSkip = !isBonusStage
       && localPlayer.ringoutSkipTimerFrames <= 0
-      && this.session.isSinglePlayer(this)
-      && this.input?.isPrimaryActionDown?.();
+      && this.falloutSkipAllowed()
+      && (this.readButtonsForPlayer(localPlayer) & BUTTON_PRIMARY) !== 0;
     if (canSkip) {
       localPlayer.ringoutTimerFrames = 0;
     }
@@ -4342,6 +4349,57 @@ export class GameCore {
     return this.lastLocalInput;
   }
 
+  private readButtonsForPlayer(player: PlayerState): number {
+    const feed = this.playerInputFeeds.get(player.id);
+    if (feed && feed.length > 0) {
+      const idx = this.playerInputFeedIndices.get(player.id) ?? 0;
+      const frame = (feed.length === 1 ? feed[0] : feed[Math.max(0, idx - 1)]) as QuantizedInput | undefined;
+      if (frame && typeof frame.buttons === 'number') {
+        return frame.buttons;
+      }
+    }
+    if (player.id === this.localPlayerId) {
+      return this.lastLocalInput?.buttons ?? 0;
+    }
+    return 0;
+  }
+
+  private falloutSkipAllowed(): boolean {
+    if (this.session.isSinglePlayer(this)) {
+      return true;
+    }
+    return isRandomizerEnabled() || isTotalRandomizerEnabled() || this.falloutSkipEnabled;
+  }
+
+  private consumeRespawnRequests() {
+    if (!this.stage || this.loadingStage || this.activeResultReplay) {
+      return;
+    }
+    const allowed = isRandomizerEnabled() || isTotalRandomizerEnabled() || this.respawnButtonEnabled;
+    if (!allowed) {
+      for (const player of this.players) {
+        player.prevButtons = this.readButtonsForPlayer(player);
+      }
+      return;
+    }
+    for (const player of this.players) {
+      const buttons = this.readButtonsForPlayer(player);
+      const wasDown = (player.prevButtons & BUTTON_RESPAWN) !== 0;
+      player.prevButtons = buttons;
+      if ((buttons & BUTTON_RESPAWN) === 0 || wasDown) {
+        continue;
+      }
+      if (player.isSpectator || player.pendingSpawn || player.finished || player.freeFly) {
+        continue;
+      }
+      if (player.ringoutTimerFrames > 0 || player.goalTimerFrames > 0) {
+        continue;
+      }
+      player.ringoutTimerFrames = RESPAWN_REQUEST_FRAMES;
+      player.ringoutSkipTimerFrames = 0;
+    }
+  }
+
   private readDeterministicStickForPlayer(player: PlayerState, inputEnabled: boolean) {
     if (!inputEnabled) {
       if (player.id === this.localPlayerId) {
@@ -4789,6 +4847,7 @@ export class GameCore {
           this.accumulator = 0;
           break;
         }
+        this.consumeRespawnRequests();
         if (!resultReplayActive && ringoutActive) {
           if (this.updateRingout(isBonusStage)) {
             break;
@@ -4806,6 +4865,12 @@ export class GameCore {
             }
             if (player.ringoutTimerFrames > 0) {
               player.ringoutTimerFrames -= 1;
+              if (player.ringoutSkipTimerFrames > 0) {
+                player.ringoutSkipTimerFrames -= 1;
+              } else if (!isBonusStage && this.falloutSkipAllowed()
+                && (this.readButtonsForPlayer(player) & BUTTON_PRIMARY) !== 0) {
+                player.ringoutTimerFrames = 0;
+              }
               if (player.ringoutTimerFrames <= 0) {
                 if (isBonusStage) {
                   this.hidePlayerBall(player);

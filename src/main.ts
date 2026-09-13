@@ -417,8 +417,71 @@ export function runMainApp() {
     overlayController?.updateFullscreenButtonVisibility();
   }
   
+  const respawnButton = document.getElementById('respawn-button') as HTMLButtonElement | null;
+  if (respawnButton) {
+    const setRespawn = (value: boolean) => game.input?.setRespawnRequested?.(value);
+    respawnButton.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      setRespawn(true);
+    });
+    for (const type of ['pointerup', 'pointerleave', 'pointercancel']) {
+      respawnButton.addEventListener(type, () => setRespawn(false));
+    }
+  }
+
+  bindRandomizerCog(() => {
+    refreshRandomizerPicker();
+  });
+
+  const RESPAWN_BUTTON_KEY = 'wmb-respawn-button';
+  const FALLOUT_SKIP_KEY = 'wmb-fallout-skip';
+  const respawnToggle = document.getElementById('respawn-button-toggle') as HTMLInputElement | null;
+  const falloutSkipToggle = document.getElementById('fallout-skip-toggle') as HTMLInputElement | null;
+
+  function readFlag(key: string): boolean {
+    try {
+      return window.localStorage.getItem(key) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  function writeFlag(key: string, value: boolean) {
+    try {
+      window.localStorage.setItem(key, value ? '1' : '0');
+    } catch {
+    }
+  }
+
+  function respawnButtonAllowed(): boolean {
+    return randomizerPersistedOn() || readFlag(RESPAWN_BUTTON_KEY);
+  }
+
+  function syncRespawnButtonSetting() {
+    game.respawnButtonEnabled = respawnButtonAllowed();
+    game.falloutSkipEnabled = randomizerPersistedOn() || readFlag(FALLOUT_SKIP_KEY);
+    if (respawnToggle) {
+      respawnToggle.checked = readFlag(RESPAWN_BUTTON_KEY);
+    }
+    if (falloutSkipToggle) {
+      falloutSkipToggle.checked = readFlag(FALLOUT_SKIP_KEY);
+    }
+  }
+
+  respawnToggle?.addEventListener('change', () => {
+    writeFlag(RESPAWN_BUTTON_KEY, respawnToggle.checked);
+    syncRespawnButtonSetting();
+  });
+
+  falloutSkipToggle?.addEventListener('change', () => {
+    writeFlag(FALLOUT_SKIP_KEY, falloutSkipToggle.checked);
+    syncRespawnButtonSetting();
+  });
+
   function setOverlayVisible(visible: boolean) {
     overlayController?.setOverlayVisible(visible);
+    syncRespawnButtonSetting();
+    respawnButton?.classList.toggle('hidden', visible || !respawnButtonAllowed());
   }
   
   function maybeStartSmb2LikeStageFade() {

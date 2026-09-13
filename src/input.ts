@@ -1,5 +1,8 @@
+import { BUTTON_PRIMARY, BUTTON_RESPAWN } from './determinism.js';
+
 export class Input {
   constructor() {
+    this.respawnRequested = false;
     this.down = new Set();
     this.pressed = new Set();
     this.gamepadIndex = null;
@@ -601,9 +604,25 @@ export class Input {
   getButtonsBitmask() {
     let bits = 0;
     if (this.isPrimaryActionDown()) {
-      bits |= 1;
+      bits |= BUTTON_PRIMARY;
+    }
+    if (this.isRespawnActionDown()) {
+      bits |= BUTTON_RESPAWN;
     }
     return bits;
+  }
+
+  isRespawnActionDown() {
+    if (this.respawnRequested || this.down.has('KeyF')) {
+      return true;
+    }
+    const pad = this.getActiveGamepad();
+    const button = pad?.buttons?.[3];
+    return !!button && (button.pressed || button.value > 0.5);
+  }
+
+  setRespawnRequested(value: boolean) {
+    this.respawnRequested = !!value;
   }
 
   getGamepadStick() {

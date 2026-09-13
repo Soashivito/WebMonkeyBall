@@ -108,7 +108,7 @@
         <button id="resume" class="ghost" disabled>Resume</button>
       </div>
       <div class="hint">
-        <div>Controls: WASD / Arrow Keys = tilt, R = reset stage, N = skip stage</div>
+        <div>Controls: WASD / Arrow Keys = tilt, F = respawn, R = reset stage, N = skip stage</div>
         <div>If you have a controller plugged in, it should work too.</div>
       </div>
       <div id="main-menu-version" class="menu-version" aria-label="Build version"></div>
@@ -489,6 +489,14 @@
             <div class="panel-section-header">
               <h2>Controls</h2>
             </div>
+            <label class="checkbox-field">
+              <input type="checkbox" id="respawn-button-toggle" />
+              <span>Respawn button (F)</span>
+            </label>
+            <label class="checkbox-field">
+              <input type="checkbox" id="fallout-skip-toggle" />
+              <span>Skip fallout replay</span>
+            </label>
             <label id="control-mode-field" class="field hidden">
               <span>Control Mode</span>
               <div class="control-mode-row">
@@ -675,6 +683,10 @@
 
   <button id="mobile-menu-button" class="mobile-menu-button hidden" type="button">
     Menu
+  </button>
+
+  <button id="respawn-button" class="ghost compact respawn-button hidden" type="button">
+    Respawn
   </button>
 
   <button id="fullscreen-button" class="ghost compact fullscreen-button hidden" type="button">

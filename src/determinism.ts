@@ -1,6 +1,9 @@
 export type QuantizedStick = { x: number; y: number };
 export type QuantizedInput = { x: number; y: number; buttons?: number };
 
+export const BUTTON_PRIMARY = 1;
+export const BUTTON_RESPAWN = 2;
+
 export function quantizeStickAxis(value: number): number {
   const clamped = Math.max(-1, Math.min(1, value));
   const quantized = Math.round(clamped * 127);

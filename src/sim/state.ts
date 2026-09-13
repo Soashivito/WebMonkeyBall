@@ -25,6 +25,7 @@ export type PlayerState = {
   respawnTimerFrames: number;
   ringoutTimerFrames: number;
   ringoutSkipTimerFrames: number;
+  prevButtons: number;
 };
 
 export type ResultReplayHistoryFrame = {

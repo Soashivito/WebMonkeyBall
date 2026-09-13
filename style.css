@@ -1549,3 +1549,55 @@ button:disabled {
   flex-direction: column;
   gap: 4px;
 }
+
+.respawn-button {
+  position: fixed;
+  top: 44px;
+  right: 8px;
+  z-index: 40;
+  min-width: 96px;
+  min-height: 44px;
+  border-radius: 999px;
+  background: rgba(8, 8, 12, 0.78);
+  opacity: 0.85;
+  touch-action: none;
+}
+
+.randomizer-cog {
+  margin-top: 8px;
+  align-self: flex-start;
+}
+
+.randomizer-options {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 12, 18, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.randomizer-options-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.randomizer-options-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.randomizer-seed-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.randomizer-seed-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
