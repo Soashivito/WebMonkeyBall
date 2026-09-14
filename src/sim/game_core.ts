@@ -59,6 +59,12 @@ import type { SessionController } from '../session/session_controller.js';
 import { createSessionController } from '../session/index.js';
 import type { ModHooks } from '../mods/mod_types.js';
 import type { ModRenderPrimitive } from '../mods/render_primitives.js';
+import { getRandomizerOptions } from '../app/gameplay/randomizer_options.js';
+
+function getRandomizerRunOptions() {
+  const opts = getRandomizerOptions();
+  return { seed: opts.seed, includeBonus: opts.includeBonus };
+}
 import type {
   BananaRenderState,
   ConfettiRenderState,
@@ -2356,7 +2362,7 @@ export class GameCore {
         if (totalOn) {
           const pool = buildTotalRandomizerPool();
           if (pool) {
-            applyRandomizerPool(this.course, pool.stageList, pool.bonusFlags);
+            applyRandomizerPool(this.course, pool.stageList, pool.bonusFlags, getRandomizerRunOptions());
           }
         } else {
           let keys = getRandomizerGroups();
@@ -2366,7 +2372,7 @@ export class GameCore {
           if (keys.length > 0) {
             const pool = buildRandomizerPool(this.gameSource, keys);
             if (pool) {
-              applyRandomizerPool(this.course, pool.stageList, pool.bonusFlags);
+              applyRandomizerPool(this.course, pool.stageList, pool.bonusFlags, getRandomizerRunOptions());
             }
           }
         }

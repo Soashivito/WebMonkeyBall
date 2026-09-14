@@ -156,6 +156,29 @@ function renderDifficultyPicker(enabled: boolean) {
   setRandomizerGroups(selected);
 }
 
+export function refreshRandomizerPicker() {
+  renderDifficultyPicker(isRandomizerEnabled());
+}
+
+let applyTotalRandomizer: ((value: boolean) => void) | null = null;
+
+function syncCogVisibility() {
+  const anyRandomizer = isRandomizerEnabled() || isTotalRandomizerEnabled();
+  for (const [buttonId, panelId] of [
+    ['randomizer-cog-sp', 'randomizer-options-sp'],
+    ['randomizer-cog-mp', 'randomizer-options-mp'],
+  ]) {
+    document.getElementById(buttonId)?.classList.toggle('hidden', !anyRandomizer);
+    if (!anyRandomizer) {
+      document.getElementById(panelId)?.classList.add('hidden');
+    }
+  }
+  const omni = isTotalRandomizerEnabled();
+  for (const group of document.querySelectorAll('.randomizer-options-sources')) {
+    group.classList.toggle('hidden', !omni);
+  }
+}
+
 export function initRandomizerToggle() {
   const enabled = readStoredEnabled();
   setEnabledFlag(enabled);

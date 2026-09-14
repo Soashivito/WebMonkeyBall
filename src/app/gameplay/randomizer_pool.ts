@@ -13,8 +13,10 @@ import { getActivePack, getPackStageRules, getPackStageNameUnchecked, packStageH
 import { setVerifiedInstalledStages, getVerifiedInstalledStages } from '../../randomizer_state.js';
 import { isSmb1BonusStageId } from '../../randomizer_core.js';
 import { STAGE_INFO_MAP } from '../../noclip/SuperMonkeyBall/StageInfo.js';
-import { getSmb2StageInfo, getMb2wsStageInfo } from '../../smb2_render.js';
+import { hasSmb2StageInfo, hasMb2wsStageInfo } from '../../smb2_render.js';
+import { isSourceEnabled, sourceKeyForPack } from './randomizer_options.js';
 
+//use has*StageInfo, get* synthesizes an entry for any id
 function stageLoadableForSource(source: GameSource, id: number): boolean {
   if (source === GAME_SOURCES.SMB2) {
     return hasSmb2StageInfo(id);
@@ -341,12 +343,16 @@ export function ensurePackStagesVerified(): Promise<void> {
   }
   packVerifiedKey = identity;
   packVerifiedIds = null;
-  packVerificationPromise = verifyPackStages(pack);
+  packVerificationPromise = verifyPackStages(pack, identity);
   return packVerificationPromise;
 }
 
 function getVerifiedPackStageSet(): Set<number> | null {
   return packVerifiedIds;
+}
+
+function smb1BonusFlags(entries: any[]): boolean[] {
+  return entries.map((entry) => typeof entry?.id === 'number' && isSmb1BonusStageId(entry.id));
 }
 
 export function buildRandomizerPool(gameSource: GameSource, keys: string[]): RandomizerPool | null {
@@ -382,7 +388,8 @@ export function buildRandomizerPool(gameSource: GameSource, keys: string[]): Ran
       continue;
     }
     if (gameSource === GAME_SOURCES.SMB1) {
-      pushEntries(getStageListForDifficulty(key), null, key, true);
+      const smb1List = getStageListForDifficulty(key);
+      pushEntries(smb1List, smb1BonusFlags(smb1List), key, true);
     } else if (gameSource === GAME_SOURCES.SMB2) {
       const { stageList: list, bonusFlags: bf } = getSmb2ChallengeStageEntries(key);
       pushEntries(list, bf, key, true);
@@ -401,6 +408,9 @@ export function buildTotalRandomizerPool(): RandomizerPool | null {
   const bonusFlags: boolean[] = [];
 
   const pushFrom = (source: GameSource, entries: any[], bonus: boolean[] | null, difficultyTag: string | null) => {
+    if (!isSourceEnabled(source)) {
+      return;
+    }
     const installed = getInstalledStageIdSet(source);
     entries.forEach((entry, index) => {
       if (entry == null || typeof entry.id !== 'number') {
@@ -444,6 +454,9 @@ export function buildTotalRandomizerPool(): RandomizerPool | null {
   const savedPackEnabled = isPackEnabled();
   for (const pack of allPacks) {
     const identity = packIdentity(pack);
+    if (!isSourceEnabled(sourceKeyForPack(identity))) {
+      continue;
+    }
     const packSource = pack.manifest.gameSource;
     setActivePack(pack);
     setPackEnabled(true);

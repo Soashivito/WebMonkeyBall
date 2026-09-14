@@ -28,7 +28,7 @@ export interface RandomizerCourse {
   currentFloor?: number;
 }
 
-function isBonusStageId(stageId: number): boolean {
+export function isSmb1BonusStageId(stageId: number): boolean {
   return stageId >= 91 && stageId <= 95;
 }
 
@@ -37,7 +37,7 @@ export function courseIndexIsBonus(course: RandomizerCourse, index: number): boo
     return course.bonusFlags[index] === true;
   }
   const id = course.stageList[index]?.id;
-  return typeof id === 'number' && isBonusStageId(id);
+  return typeof id === 'number' && isSmb1BonusStageId(id);
 }
 
 function entryStageUnavailable(entry: RandomizerStageEntry | undefined): boolean {
@@ -47,6 +47,33 @@ function entryStageUnavailable(entry: RandomizerStageEntry | undefined): boolean
   return isStageRuntimeUnavailable(entry.gameSource, entry.id, entry.packStage === true);
 }
 
+function hashSeed(text: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash >>> 0;
+}
+
+export function seedRandomizerCourse(course: RandomizerCourse, seed: string): void {
+  const text = typeof seed === 'string' && seed.trim() ? seed.trim() : String(Date.now()) + ':' + String(Math.random());
+  (course as any).__randomizerSeed = text;
+  (course as any).__randomizerRngState = hashSeed(text) || 1;
+}
+
+function nextRandom(course: RandomizerCourse): number {
+  const state = (course as any).__randomizerRngState;
+  if (typeof state !== 'number') {
+    return Math.random();
+  }
+  let x = (state + 0x6d2b79f5) >>> 0;
+  (course as any).__randomizerRngState = x;
+  x = Math.imul(x ^ (x >>> 15), x | 1) >>> 0;
+  x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+  return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+}
+
 export function pickRandomizerIndex(course: RandomizerCourse, currentIndex: number): number | null {
   if (!course.__randomizerVisited) {
     course.__randomizerVisited = new Set<number>();
@@ -54,7 +81,10 @@ export function pickRandomizerIndex(course: RandomizerCourse, currentIndex: numb
   course.__randomizerVisited.add(currentIndex);
   const remaining: number[] = [];
   for (let i = 0; i < course.stageList.length; i += 1) {
-    if (course.__randomizerVisited.has(i) || courseIndexIsBonus(course, i)) {
+    if (course.__randomizerVisited.has(i)) {
+      continue;
+    }
+    if (!(course as any).__randomizerIncludeBonus && courseIndexIsBonus(course, i)) {
       continue;
     }
     if (entryStageUnavailable(course.stageList[i])) {
@@ -65,7 +95,7 @@ export function pickRandomizerIndex(course: RandomizerCourse, currentIndex: numb
   if (remaining.length === 0) {
     return null;
   }
-  const pick = remaining[Math.floor(Math.random() * remaining.length)];
+  const pick = remaining[Math.floor(nextRandom(course) * remaining.length)];
   course.__randomizerVisited.add(pick);
   return pick;
 }
@@ -113,11 +143,31 @@ export function randomizerAdvanceCourse(course: RandomizerCourse): boolean {
   return true;
 }
 
+function pickRandomizerStartIndex(course: RandomizerCourse): number | null {
+  const candidates: number[] = [];
+  for (let i = 0; i < course.stageList.length; i += 1) {
+    if (!(course as any).__randomizerIncludeBonus && courseIndexIsBonus(course, i)) {
+      continue;
+    }
+    if (entryStageUnavailable(course.stageList[i])) {
+      continue;
+    }
+    candidates.push(i);
+  }
+  if (candidates.length === 0) {
+    return null;
+  }
+  return candidates[Math.floor(nextRandom(course) * candidates.length)];
+}
+
 export function applyRandomizerPool(
   course: RandomizerCourse,
   stageList: RandomizerStageEntry[],
   bonusFlags?: boolean[] | null,
+  options?: { seed?: string; includeBonus?: boolean },
 ) {
+  (course as any).__randomizerIncludeBonus = options?.includeBonus === true;
+  seedRandomizerCourse(course, options?.seed ?? '');
   if (!Array.isArray(stageList) || stageList.length === 0) {
     return;
   }

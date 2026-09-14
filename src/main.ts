@@ -22,7 +22,8 @@ import { HudRenderer } from './hud.js';
 import { createDefaultModRegistry } from './mods/index.js';
 import { runAppBootstrap } from './app/bootstrap.js';
 import { collectMainDomRefs } from './app/main/dom_refs.js';
-import { initRandomizerToggle } from './app/gameplay/randomizer_toggle.js';
+import { initRandomizerToggle, refreshRandomizerPicker, randomizerPersistedOn } from './app/gameplay/randomizer_toggle.js';
+import { bindRandomizerCog } from './app/gameplay/randomizer_cog.js';
 import {
   clampInt,
   chatTiming,
@@ -1968,9 +1969,10 @@ export function runMainApp() {
       courseSelection.updateGameSourceFields();
       syncCoursePlaySourceOptions();
       syncCoursePlaySourceSelection();
+      refreshRandomizerPicker();
     },
   });
-  
+
   bindVolumeControl(musicVolumeInput, musicVolumeValue, (value) => {
     audio.setMusicVolume(value);
   });
