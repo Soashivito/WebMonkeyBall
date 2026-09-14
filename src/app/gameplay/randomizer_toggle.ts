@@ -5,11 +5,11 @@ import { getActivePack } from '../../pack.js';
 import { GAME_SOURCES, type GameSource } from '../../shared/constants/index.js';
 
 const ENABLED_KEY = 'wmb-randomizer-enabled';
+const TOTAL_KEY = 'wmb-randomizer-total';
 const DIFFICULTIES_KEY = 'wmb-randomizer-difficulties';
 const ENABLE_CHECKBOX_IDS = ['randomizer-toggle-sp', 'randomizer-toggle-mp'];
 const SOURCE_SELECT_ID = 'course-play-source';
 const SP_DIFFICULTY_SELECT_ID = 'course-play-difficulty';
-const SP_DIFFICULTIES_CONTAINER_ID = 'randomizer-difficulties-sp';
 
 interface CurrentSource {
   gameSource: GameSource;
@@ -90,11 +90,14 @@ function applySelection(current: CurrentSource) {
 }
 
 function renderDifficultyPicker(enabled: boolean) {
-  const container = document.getElementById(SP_DIFFICULTIES_CONTAINER_ID);
-  if (!container) {
-    return;
+  for (const box of document.querySelectorAll('.randomizer-difficulties')) {
+    renderDifficultyPickerInto(box as HTMLElement, enabled);
   }
-  container.classList.toggle('hidden', !enabled);
+}
+
+function renderDifficultyPickerInto(container: HTMLElement, enabled: boolean) {
+  const group = container.closest('.randomizer-difficulties-group') ?? container;
+  group.classList.toggle('hidden', !enabled);
   if (!enabled) {
     return;
   }
@@ -150,6 +153,11 @@ function renderDifficultyPicker(enabled: boolean) {
       map[current.gameSource] = picked;
       writeStoredDifficulties(map);
       setRandomizerGroups(picked);
+      for (const other of document.querySelectorAll('.randomizer-difficulties')) {
+        if (other !== container) {
+          renderDifficultyPickerInto(other as HTMLElement, true);
+        }
+      }
     });
   }
 
@@ -192,7 +200,11 @@ export function initRandomizerToggle() {
     }
     box.addEventListener('change', () => {
       setEnabledFlag(box.checked);
+      if (box.checked) {
+        applyTotalRandomizer?.(false);
+      }
       renderDifficultyPicker(box.checked);
+      syncCogVisibility();
     });
   }
 
@@ -201,7 +213,6 @@ export function initRandomizerToggle() {
     renderDifficultyPicker(isRandomizerEnabled());
   });
 
-  const TOTAL_KEY = 'wmb-randomizer-total';
   let storedTotal = false;
   try {
     storedTotal = window.localStorage.getItem(TOTAL_KEY) === '1';
@@ -210,7 +221,18 @@ export function initRandomizerToggle() {
   }
   setTotalRandomizerEnabled(storedTotal);
   const applyTotal = (value: boolean) => {
+    if (value) {
+      setEnabledFlag(false);
+      for (const id of ENABLE_CHECKBOX_IDS) {
+        const other = document.getElementById(id) as HTMLInputElement | null;
+        if (other && other.checked) {
+          other.checked = false;
+        }
+      }
+      renderDifficultyPicker(false);
+    }
     setTotalRandomizerEnabled(value);
+    syncCogVisibility();
     try {
       window.localStorage.setItem(TOTAL_KEY, value ? '1' : '0');
     } catch {
@@ -222,6 +244,7 @@ export function initRandomizerToggle() {
       }
     }
   };
+  applyTotalRandomizer = applyTotal;
   for (const id of ['randomizer-total-sp', 'randomizer-total-mp']) {
     const box = document.getElementById(id) as HTMLInputElement | null;
     if (!box) {
@@ -230,4 +253,8 @@ export function initRandomizerToggle() {
     box.checked = storedTotal;
     box.addEventListener('change', () => applyTotal(box.checked));
   }
+  if (storedTotal && readStoredEnabled()) {
+    applyTotal(true);
+  }
+  syncCogVisibility();
 }
