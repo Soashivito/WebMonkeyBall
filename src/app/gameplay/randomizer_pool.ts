@@ -478,7 +478,5 @@ export function buildTotalRandomizerPool(): RandomizerPool | null {
   setActivePack(savedActivePack);
   setPackEnabled(savedPackEnabled);
 
-
-
   return stageList.length > 0 ? { stageList, bonusFlags } : null;
 }

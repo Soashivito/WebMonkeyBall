@@ -40,19 +40,9 @@ export async function savePack(record: StoredPack): Promise<void> {
 export async function getAllPacks(): Promise<StoredPack[]> {
   const db = await openDb();
   const out = await new Promise<StoredPack[]>((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readonly');
-    const result: StoredPack[] = [];
-    const cursorReq = tx.objectStore(STORE).openCursor();
-    cursorReq.onsuccess = () => {
-      const cursor = cursorReq.result;
-      if (cursor) {
-        result.push(cursor.value as StoredPack);
-        cursor.continue();
-      } else {
-        resolve(result);
-      }
-    };
-    cursorReq.onerror = () => reject(cursorReq.error);
+    const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result as StoredPack[]);
+    req.onerror = () => reject(req.error);
   });
   db.close();
   return out;

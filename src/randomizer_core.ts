@@ -56,7 +56,7 @@ function hashSeed(text: string): number {
   return hash >>> 0;
 }
 
-export function seedRandomizerCourse(course: RandomizerCourse, seed: string): void {
+function seedRandomizerCourse(course: RandomizerCourse, seed: string): void {
   const text = typeof seed === 'string' && seed.trim() ? seed.trim() : String(Date.now()) + ':' + String(Math.random());
   (course as any).__randomizerSeed = text;
   (course as any).__randomizerRngState = hashSeed(text) || 1;
@@ -74,7 +74,7 @@ function nextRandom(course: RandomizerCourse): number {
   return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
 }
 
-export function pickRandomizerIndex(course: RandomizerCourse, currentIndex: number): number | null {
+function pickRandomizerIndex(course: RandomizerCourse, currentIndex: number): number | null {
   if (!course.__randomizerVisited) {
     course.__randomizerVisited = new Set<number>();
   }
