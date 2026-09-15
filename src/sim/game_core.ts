@@ -2415,10 +2415,11 @@ export class GameCore {
     if (!active) {
       return null;
     }
-    const packBase = getPackStageBasePath(this.gameSource);
-    const isPack =
-      (this.course as any)?.currentStageIsPackStage === true ||
-      (packBase !== null && this.stageBasePath === packBase);
+    const isPack = isPackStageContext(
+      this.gameSource,
+      this.stageBasePath,
+      (this.course as any)?.currentStageIsPackStage,
+    );
     return isPack && active.manifest.gameSource === this.gameSource ? active : null;
   }
 
@@ -2429,31 +2430,14 @@ export class GameCore {
     }
     const isPackStage = (this.course as any).currentStageIsPackStage === true;
     if (isPackStage) {
+      //we look the pack up by packId, the active one isnt always this stage
       const packId = (this.course as any)?.currentStagePackId as string | undefined;
-      let pack = packId ? getLoadedPackByIdentity(packId) : null;
-      if (!pack || pack.manifest.gameSource !== totalSrc) {
-        const active = getActivePack();
-        if (active && active.manifest.gameSource === totalSrc) {
-          pack = active;
-        }
-      }
+      const pack = packId ? getLoadedPackByIdentity(packId) : null;
       if (pack && pack.manifest.gameSource === totalSrc) {
         setActivePack(pack);
         setPackEnabled(true);
         this.gameSource = totalSrc;
         this.stageBasePath = pack.basePath;
-      } else {
-        let packBase: string | null | undefined = getPackStageBasePath(totalSrc);
-        if (packBase == null) {
-          const active = getActivePack();
-          if (active && active.manifest.gameSource === totalSrc) {
-            packBase = active.basePath;
-          }
-        }
-        if (packBase != null) {
-          this.gameSource = totalSrc;
-          this.stageBasePath = packBase;
-        }
       }
     } else {
       setPackEnabled(false);
