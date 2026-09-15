@@ -3461,7 +3461,11 @@ export class GameCore {
     } catch (err) {
       this.lastStageLoadFailed = true;
       this.statusText = `Failed to load stage ${stageId}.`;
-      console.error(err);
+      if (isRandomizerEnabled() || isTotalRandomizerEnabled()) {
+        console.warn(`Stage ${stageId} failed to load, retiring it from the randomizer pool.`, err);
+      } else {
+        console.error(err);
+      }
       this.updateHud();
     } finally {
       if (loadToken === this.loadToken) {

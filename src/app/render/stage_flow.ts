@@ -34,6 +34,7 @@ type StageFlowDeps = {
   getStageBasePath: (gameSource: GameSource) => string;
   prefetchPath: (path: string) => void;
   isNaomiStage: (stageId: number) => boolean;
+  onStageRenderFailed?: (stageId: number, err: unknown) => void;
 };
 
 export class StageFlowController {
@@ -165,6 +166,19 @@ export class StageFlowController {
   }
 
   async handleStageLoaded(stageId: number) {
+    try {
+      await this.renderStage(stageId);
+    } catch (err) {
+      if (isRandomizerEnabled() || isTotalRandomizerEnabled()) {
+        console.warn(`Stage ${stageId} failed to render, retiring it from the randomizer pool.`, err);
+      } else {
+        console.error(`Stage ${stageId} failed to render.`, err);
+      }
+      this.deps.onStageRenderFailed?.(stageId, err);
+    }
+  }
+
+  private async renderStage(stageId: number) {
     const token = ++this.stageLoadToken;
     this.deps.setRenderReady(false);
     this.deps.ensureGfxReady();
