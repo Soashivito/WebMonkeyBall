@@ -7,8 +7,7 @@ type PackManageUiOptions = {
 
 function downloadStoredPack(rec: StoredPack) {
   try {
-    const blob = new Blob([rec.bytes], { type: 'application/zip' });
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(rec.bytes);
     const link = document.createElement('a');
     link.href = url;
     link.download = `${(rec.name || 'pack').replace(/[^a-z0-9_\-]+/gi, '_')}.zip`;
