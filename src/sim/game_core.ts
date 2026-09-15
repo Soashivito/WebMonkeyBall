@@ -223,6 +223,7 @@ export type GameCoreOptions = {
   onResumed?: () => void;
   onStageLoadStart?: (stageId: number) => void;
   onStageLoaded?: (stageId: number) => void;
+  isNetplayHost?: () => boolean;
   onStageGoal?: (info: {
     stageId: number;
     goalType: string | null;
@@ -299,6 +300,7 @@ export class GameCore {
   public onPaused?: () => void;
   public onResumed?: () => void;
   public onStageLoadStart?: (stageId: number) => void;
+  public isNetplayHost?: () => boolean;
   public onStageLoaded?: (stageId: number) => void;
   public onStageGoal?: (info: {
     stageId: number;
@@ -445,6 +447,7 @@ export class GameCore {
     onResumed,
     onStageLoadStart,
     onStageLoaded,
+    isNetplayHost,
     onStageGoal,
     onStageFail,
     onCourseComplete,
@@ -462,6 +465,7 @@ export class GameCore {
     this.onPaused = onPaused;
     this.onResumed = onResumed;
     this.onStageLoadStart = onStageLoadStart;
+    this.isNetplayHost = isNetplayHost;
     this.onStageLoaded = onStageLoaded;
     this.onStageGoal = onStageGoal;
     this.onStageFail = onStageFail;
@@ -2479,7 +2483,7 @@ export class GameCore {
     if (!(isRandomizerEnabled() || isTotalRandomizerEnabled())) {
       return;
     }
-    if (this.session.isMultiplayer(this)) {
+    if (this.session.isMultiplayer(this) && !(this.isNetplayHost?.() ?? false)) {
       return;
     }
     const maxRecovery = Math.max(1, ((this.course as any)?.stageList?.length ?? 0) + 1);

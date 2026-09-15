@@ -631,6 +631,7 @@ export function runMainApp() {
     onStageLoadStart: () => {
       matchStartFlow?.handleHostStageLoadStart();
     },
+    isNetplayHost: () => netplayEnabled && netplayState?.role === 'host',
     onStageLoaded: (stageId) => {
       if (netplayEnabled && netplayState) {
         netplaySync?.resetNetplayForStage();
