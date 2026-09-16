@@ -482,7 +482,7 @@ export function runMainApp() {
   function setOverlayVisible(visible: boolean) {
     overlayController?.setOverlayVisible(visible);
     syncRespawnButtonSetting();
-    respawnButton?.classList.toggle('hidden', visible || !respawnButtonAllowed());
+    respawnButton?.classList.toggle('hidden', visible || !hasTouch || !respawnButtonAllowed());
   }
   
   function maybeStartSmb2LikeStageFade() {
