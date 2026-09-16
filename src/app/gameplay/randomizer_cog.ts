@@ -100,6 +100,13 @@ function buildPanel(panel: HTMLElement, onChanged: () => void) {
     onChanged();
   }));
 
+  if (suffix === 'sp') {
+    panel.appendChild(makeCheckbox('Infinite time', options.infiniteTime, (value) => {
+      setRandomizerOptions({ infiniteTime: value });
+      onChanged();
+    }));
+  }
+
   const difficulties = document.createElement('div');
   difficulties.className = 'randomizer-options-group randomizer-difficulties-group';
   const difficultiesTitle = document.createElement('div');

@@ -625,6 +625,9 @@ export class GameCore {
     if (this.singleplayerStageViewActive && this.session.isSinglePlayer(this)) {
       return true;
     }
+    if (this.session.isSinglePlayer(this) && (isRandomizerEnabled() || isTotalRandomizerEnabled()) && getRandomizerOptions().infiniteTime) {
+      return true;
+    }
     return this.infiniteTimeEnabled && this.session.isMultiplayer(this);
   }
 

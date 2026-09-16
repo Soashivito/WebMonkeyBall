@@ -4,12 +4,14 @@ export type RandomizerOptions = {
   disabledSources: string[];
   seed: string;
   includeBonus: boolean;
+  infiniteTime: boolean;
 };
 
 const DEFAULTS: RandomizerOptions = {
   disabledSources: [],
   seed: '',
   includeBonus: false,
+  infiniteTime: false,
 };
 
 let cached: RandomizerOptions | null = null;
@@ -31,6 +33,7 @@ export function getRandomizerOptions(): RandomizerOptions {
       : DEFAULTS.disabledSources.slice(),
     seed: typeof parsed?.seed === 'string' ? parsed.seed : DEFAULTS.seed,
     includeBonus: parsed?.includeBonus === true,
+    infiniteTime: parsed?.infiniteTime === true,
   };
   return cached;
 }
