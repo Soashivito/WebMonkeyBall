@@ -1,4 +1,4 @@
-import { DEFAULT_STAGE_TIME, stageLabelFromName, INFO_FLAGS } from './shared/constants/index.js';
+import { DEFAULT_STAGE_TIME, stageLabelFromName, INFO_FLAGS, GAME_SOURCES } from './shared/constants/index.js';
 import { getPackStageRules } from './pack.js';
 import { randomizerEnabled, randomizerAdvanceCourse } from './randomizer_core.js';
 
@@ -203,11 +203,11 @@ function getWarpDistance(entry: CourseStageEntry, goalType: string | null) {
   return getDefaultWarpDistance(normalized);
 }
 
-function isFloorClear(info) {
+function isFloorClear(info, course) {
   if ((info.flags & INFO_FLAGS.GOAL) || (info.flags & INFO_FLAGS.BONUS_CLEAR)) {
     return true;
   }
-  if (isBonusStage(info.u_currStageId)
+  if (course.isBonusStage()
     && ((info.flags & INFO_FLAGS.TIMEOVER) || (info.flags & INFO_FLAGS.FALLOUT))) {
     return true;
   }
@@ -271,6 +271,16 @@ export class Course {
     this.currentFloor = 1;
   }
 
+  isBonusStage() {
+    if (this.currentStageIsPackStage === true) {
+      return false;
+    }
+    if (this.currentStageGameSource !== undefined && this.currentStageGameSource !== GAME_SOURCES.SMB1) {
+      return false;
+    }
+    return isBonusStage(this.currentStageId);
+  }
+
   getTimeLimitFrames() {
     const entry = this.stageList[this.stageIndex];
     return entry?.timeLimitFrames ?? DEFAULT_STAGE_TIME;
@@ -332,7 +342,7 @@ export class Course {
 
   peekJumpCount(info) {
     const entry = this.stageList[this.stageIndex];
-    if (!entry || !isFloorClear(info)) {
+    if (!entry || !isFloorClear(info, this)) {
       return null;
     }
     const goalType = info.goalType ?? 'B';
@@ -366,7 +376,7 @@ export class Course {
     if (!entry) {
       return false;
     }
-    if (!isFloorClear(info)) {
+    if (!isFloorClear(info, this)) {
       return false;
     }
     if (randomizerEnabled()) {

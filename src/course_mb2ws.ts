@@ -501,6 +501,9 @@ export class Mb2wsCourse {
   }
 
   isBonusStage() {
+    if ((this as any).currentStageIsPackStage === true) {
+      return false;
+    }
     if (this.mode !== 'challenge') {
       return false;
     }
