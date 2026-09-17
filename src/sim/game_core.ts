@@ -4376,7 +4376,8 @@ export class GameCore {
     if (!this.stage || this.loadingStage || this.activeResultReplay) {
       return;
     }
-    const allowed = isRandomizerEnabled() || isTotalRandomizerEnabled() || this.respawnButtonEnabled;
+    const allowed = (isRandomizerEnabled() || isTotalRandomizerEnabled() || this.respawnButtonEnabled)
+      && this.introTimerFrames <= 0;
     if (!allowed) {
       for (const player of this.players) {
         player.prevButtons = this.readButtonsForPlayer(player);
