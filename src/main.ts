@@ -436,44 +436,9 @@ export function runMainApp() {
     refreshRandomizerPicker();
   });
 
-  const RESPAWN_BUTTON_KEY = 'wmb-respawn-button';
-  const respawnToggle = document.getElementById('respawn-button-toggle') as HTMLInputElement | null;
-
-  function readFlag(key: string): boolean {
-    try {
-      return window.localStorage.getItem(key) === '1';
-    } catch {
-      return false;
-    }
-  }
-
-  function writeFlag(key: string, value: boolean) {
-    try {
-      window.localStorage.setItem(key, value ? '1' : '0');
-    } catch {
-    }
-  }
-
-  function respawnButtonAllowed(): boolean {
-    return randomizerPersistedOn() || readFlag(RESPAWN_BUTTON_KEY);
-  }
-
-  function syncRespawnButtonSetting() {
-    game.respawnButtonEnabled = respawnButtonAllowed();
-    if (respawnToggle) {
-      respawnToggle.checked = readFlag(RESPAWN_BUTTON_KEY);
-    }
-  }
-
-  respawnToggle?.addEventListener('change', () => {
-    writeFlag(RESPAWN_BUTTON_KEY, respawnToggle.checked);
-    syncRespawnButtonSetting();
-  });
-
   function setOverlayVisible(visible: boolean) {
     overlayController?.setOverlayVisible(visible);
-    syncRespawnButtonSetting();
-    const allowed = game.session.isMultiplayer(game) ? game.roomRespawnEnabled : respawnButtonAllowed();
+    const allowed = game.session.isMultiplayer(game) ? game.roomRespawnEnabled : randomizerPersistedOn();
     respawnButton?.classList.toggle('hidden', visible || !hasTouch || !allowed);
   }
   

@@ -318,7 +318,6 @@ export class GameCore {
   }) => void;
   public onCourseComplete?: (info: { flags: number; goalType: string | null; timerCurr: number; u_currStageId: number }) => void;
   public stageBasePath: string;
-  public respawnButtonEnabled = false;
   public roomRespawnEnabled = false;
   public roomFalloutSkipEnabled = false;
   public gameSource: GameSource;
@@ -4379,7 +4378,7 @@ export class GameCore {
     }
     const enabled = this.session.isMultiplayer(this)
       ? this.roomRespawnEnabled
-      : isRandomizerEnabled() || isTotalRandomizerEnabled() || this.respawnButtonEnabled;
+      : isRandomizerEnabled() || isTotalRandomizerEnabled();
     const allowed = enabled && this.introTimerFrames <= 0;
     if (!allowed) {
       for (const player of this.players) {
