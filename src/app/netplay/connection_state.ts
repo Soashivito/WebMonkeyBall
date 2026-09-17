@@ -171,6 +171,8 @@ export class NetplayConnectionStateController {
     }
     this.deps.game.allowCourseAdvance = true;
     this.deps.game.infiniteTimeEnabled = false;
+    this.deps.game.roomRespawnEnabled = false;
+    this.deps.game.roomFalloutSkipEnabled = false;
     this.deps.game.setMultiplayerGameMode(this.deps.modeStandard);
     (this.deps.game as any).multiplayerGameModeOptions = {};
     this.stopLobbyHeartbeat();

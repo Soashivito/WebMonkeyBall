@@ -211,7 +211,7 @@ export class LobbyBrowserController {
       const result = await lobbyClient.createRoom({
         isPublic,
         courseId: 'smb1-main',
-        settings: { maxPlayers: defaultMaxPlayers, collisionEnabled: true, infiniteTimeEnabled: false, locked: false },
+        settings: { maxPlayers: defaultMaxPlayers, collisionEnabled: true, infiniteTimeEnabled: false, respawnEnabled: false, falloutSkipEnabled: false, locked: false },
         meta: this.deps.buildRoomMetaForCreation(),
       });
       this.deps.destroySingleplayerForNetplay();

@@ -13,6 +13,8 @@ type RoomSettings = {
   maxPlayers: number;
   collisionEnabled: boolean;
   infiniteTimeEnabled: boolean;
+  respawnEnabled: boolean;
+  falloutSkipEnabled: boolean;
   locked: boolean;
 };
 
@@ -483,6 +485,8 @@ function sanitizeSettings(input?: Partial<RoomSettings>): RoomSettings {
     maxPlayers,
     collisionEnabled: !!(input?.collisionEnabled ?? true),
     infiniteTimeEnabled: !!(input?.infiniteTimeEnabled ?? false),
+    respawnEnabled: !!(input?.respawnEnabled ?? false),
+    falloutSkipEnabled: !!(input?.falloutSkipEnabled ?? false),
     locked: !!(input?.locked ?? false),
   };
 }

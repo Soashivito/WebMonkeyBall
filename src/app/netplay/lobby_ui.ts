@@ -25,6 +25,8 @@ type LobbyUiDeps = {
   lobbyMaxPlayersWarning: HTMLElement | null;
   lobbyCollisionToggle: HTMLInputElement | null;
   lobbyInfiniteTimeToggle: HTMLInputElement | null;
+  lobbyRespawnToggle: HTMLInputElement | null;
+  lobbyFalloutSkipToggle: HTMLInputElement | null;
   lobbyLockToggle: HTMLInputElement | null;
   lobbyChatPanel: HTMLElement | null;
   lobbyStartButton: HTMLButtonElement | null;
@@ -208,6 +210,14 @@ export class LobbyUiController {
         this.deps.lobbyInfiniteTimeToggle.checked = false;
         this.deps.lobbyInfiniteTimeToggle.disabled = true;
       }
+      if (this.deps.lobbyRespawnToggle) {
+        this.deps.lobbyRespawnToggle.checked = false;
+        this.deps.lobbyRespawnToggle.disabled = true;
+      }
+      if (this.deps.lobbyFalloutSkipToggle) {
+        this.deps.lobbyFalloutSkipToggle.checked = false;
+        this.deps.lobbyFalloutSkipToggle.disabled = true;
+      }
       if (this.deps.lobbyChatPanel) {
         this.deps.lobbyChatPanel.classList.add('hidden');
       }
@@ -302,6 +312,12 @@ export class LobbyUiController {
     if (this.deps.lobbyInfiniteTimeToggle) {
       this.deps.lobbyInfiniteTimeToggle.checked = !!(lobbyRoom.settings?.infiniteTimeEnabled ?? false);
     }
+    if (this.deps.lobbyRespawnToggle) {
+      this.deps.lobbyRespawnToggle.checked = !!(lobbyRoom.settings?.respawnEnabled ?? false);
+    }
+    if (this.deps.lobbyFalloutSkipToggle) {
+      this.deps.lobbyFalloutSkipToggle.checked = !!(lobbyRoom.settings?.falloutSkipEnabled ?? false);
+    }
     if (this.deps.lobbyLockToggle) {
       this.deps.lobbyLockToggle.checked = !!(lobbyRoom.settings?.locked ?? false);
     }
@@ -313,6 +329,12 @@ export class LobbyUiController {
     }
     if (this.deps.lobbyInfiniteTimeToggle) {
       this.deps.lobbyInfiniteTimeToggle.disabled = !isHost;
+    }
+    if (this.deps.lobbyRespawnToggle) {
+      this.deps.lobbyRespawnToggle.disabled = !isHost;
+    }
+    if (this.deps.lobbyFalloutSkipToggle) {
+      this.deps.lobbyFalloutSkipToggle.disabled = !isHost;
     }
     if (this.deps.lobbyLockToggle) {
       this.deps.lobbyLockToggle.disabled = !isHost;

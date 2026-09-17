@@ -319,7 +319,8 @@ export class GameCore {
   public onCourseComplete?: (info: { flags: number; goalType: string | null; timerCurr: number; u_currStageId: number }) => void;
   public stageBasePath: string;
   public respawnButtonEnabled = false;
-  public falloutSkipEnabled = false;
+  public roomRespawnEnabled = false;
+  public roomFalloutSkipEnabled = false;
   public gameSource: GameSource;
   private lastStageLoadFailed = false;
   private randomizerRecoveryFailures = 0;
@@ -4369,15 +4370,17 @@ export class GameCore {
     if (this.session.isSinglePlayer(this)) {
       return true;
     }
-    return isRandomizerEnabled() || isTotalRandomizerEnabled() || this.falloutSkipEnabled;
+    return this.roomFalloutSkipEnabled;
   }
 
   private consumeRespawnRequests() {
     if (!this.stage || this.loadingStage || this.activeResultReplay) {
       return;
     }
-    const allowed = (isRandomizerEnabled() || isTotalRandomizerEnabled() || this.respawnButtonEnabled)
-      && this.introTimerFrames <= 0;
+    const enabled = this.session.isMultiplayer(this)
+      ? this.roomRespawnEnabled
+      : isRandomizerEnabled() || isTotalRandomizerEnabled() || this.respawnButtonEnabled;
+    const allowed = enabled && this.introTimerFrames <= 0;
     if (!allowed) {
       for (const player of this.players) {
         player.prevButtons = this.readButtonsForPlayer(player);

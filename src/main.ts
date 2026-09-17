@@ -277,6 +277,8 @@ export function runMainApp() {
     lobbyMaxPlayersWarning,
     lobbyCollisionToggle,
     lobbyInfiniteTimeToggle,
+    lobbyRespawnToggle,
+    lobbyFalloutSkipToggle,
     lobbyLockToggle,
     lobbyGamemodeOptionsRoot,
     lobbyStageButton,
@@ -435,9 +437,7 @@ export function runMainApp() {
   });
 
   const RESPAWN_BUTTON_KEY = 'wmb-respawn-button';
-  const FALLOUT_SKIP_KEY = 'wmb-fallout-skip';
   const respawnToggle = document.getElementById('respawn-button-toggle') as HTMLInputElement | null;
-  const falloutSkipToggle = document.getElementById('fallout-skip-toggle') as HTMLInputElement | null;
 
   function readFlag(key: string): boolean {
     try {
@@ -460,12 +460,8 @@ export function runMainApp() {
 
   function syncRespawnButtonSetting() {
     game.respawnButtonEnabled = respawnButtonAllowed();
-    game.falloutSkipEnabled = randomizerPersistedOn() || readFlag(FALLOUT_SKIP_KEY);
     if (respawnToggle) {
       respawnToggle.checked = readFlag(RESPAWN_BUTTON_KEY);
-    }
-    if (falloutSkipToggle) {
-      falloutSkipToggle.checked = readFlag(FALLOUT_SKIP_KEY);
     }
   }
 
@@ -474,15 +470,11 @@ export function runMainApp() {
     syncRespawnButtonSetting();
   });
 
-  falloutSkipToggle?.addEventListener('change', () => {
-    writeFlag(FALLOUT_SKIP_KEY, falloutSkipToggle.checked);
-    syncRespawnButtonSetting();
-  });
-
   function setOverlayVisible(visible: boolean) {
     overlayController?.setOverlayVisible(visible);
     syncRespawnButtonSetting();
-    respawnButton?.classList.toggle('hidden', visible || !hasTouch || !respawnButtonAllowed());
+    const allowed = game.session.isMultiplayer(game) ? game.roomRespawnEnabled : respawnButtonAllowed();
+    respawnButton?.classList.toggle('hidden', visible || !hasTouch || !allowed);
   }
   
   function maybeStartSmb2LikeStageFade() {
@@ -1058,6 +1050,8 @@ export function runMainApp() {
       lobbyMaxPlayersWarning,
       lobbyCollisionToggle,
       lobbyInfiniteTimeToggle,
+      lobbyRespawnToggle,
+      lobbyFalloutSkipToggle,
       lobbyLockToggle,
       lobbyRoomNameInput,
       clampInt,
@@ -2261,6 +2255,8 @@ export function runMainApp() {
     lobbyMaxPlayersSelect,
     lobbyCollisionToggle,
     lobbyInfiniteTimeToggle,
+    lobbyRespawnToggle,
+    lobbyFalloutSkipToggle,
     lobbyLockToggle,
     profileNameInput,
     profileAvatarInput,

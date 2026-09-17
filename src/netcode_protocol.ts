@@ -8,6 +8,8 @@ export type RoomSettings = {
   maxPlayers: number;
   collisionEnabled: boolean;
   infiniteTimeEnabled: boolean;
+  respawnEnabled: boolean;
+  falloutSkipEnabled: boolean;
   locked: boolean;
 };
 

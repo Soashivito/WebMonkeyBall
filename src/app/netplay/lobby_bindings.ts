@@ -9,6 +9,8 @@ type LobbyBindingsOptions = {
   lobbyMaxPlayersSelect: HTMLSelectElement | null;
   lobbyCollisionToggle: HTMLInputElement | null;
   lobbyInfiniteTimeToggle: HTMLInputElement | null;
+  lobbyRespawnToggle: HTMLInputElement | null;
+  lobbyFalloutSkipToggle: HTMLInputElement | null;
   lobbyLockToggle: HTMLInputElement | null;
   profileNameInput: HTMLInputElement | null;
   profileAvatarInput: HTMLInputElement | null;
@@ -94,6 +96,12 @@ export function bindLobbyEventHandlers(options: LobbyBindingsOptions) {
     options.onApplyLobbySettingsFromInputs();
   });
   options.lobbyInfiniteTimeToggle?.addEventListener('change', () => {
+    options.onApplyLobbySettingsFromInputs();
+  });
+  options.lobbyRespawnToggle?.addEventListener('change', () => {
+    options.onApplyLobbySettingsFromInputs();
+  });
+  options.lobbyFalloutSkipToggle?.addEventListener('change', () => {
     options.onApplyLobbySettingsFromInputs();
   });
   options.lobbyLockToggle?.addEventListener('change', () => {

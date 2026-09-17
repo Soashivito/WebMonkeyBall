@@ -143,6 +143,8 @@ export function collectMainDomRefs() {
   const lobbyMaxPlayersWarning = document.getElementById('lobby-max-players-warning') as HTMLElement | null;
   const lobbyCollisionToggle = document.getElementById('lobby-collision') as HTMLInputElement | null;
   const lobbyInfiniteTimeToggle = document.getElementById('lobby-infinite-time') as HTMLInputElement | null;
+  const lobbyRespawnToggle = document.getElementById('lobby-respawn') as HTMLInputElement | null;
+  const lobbyFalloutSkipToggle = document.getElementById('lobby-fallout-skip') as HTMLInputElement | null;
   const lobbyLockToggle = document.getElementById('lobby-locked') as HTMLInputElement | null;
   const lobbyGamemodeOptionsRoot = document.getElementById('lobby-gamemode-options') as HTMLElement | null;
   const lobbyStageButton = document.getElementById('lobby-stage-button') as HTMLButtonElement | null;
@@ -324,6 +326,8 @@ export function collectMainDomRefs() {
     lobbyMaxPlayersWarning,
     lobbyCollisionToggle,
     lobbyInfiniteTimeToggle,
+    lobbyRespawnToggle,
+    lobbyFalloutSkipToggle,
     lobbyLockToggle,
     lobbyGamemodeOptionsRoot,
     lobbyStageButton,

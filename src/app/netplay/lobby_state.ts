@@ -24,6 +24,8 @@ type LobbyStateDeps = {
   lobbyMaxPlayersSelect: HTMLSelectElement | null;
   lobbyCollisionToggle: HTMLInputElement | null;
   lobbyInfiniteTimeToggle: HTMLInputElement | null;
+  lobbyRespawnToggle: HTMLInputElement | null;
+  lobbyFalloutSkipToggle: HTMLInputElement | null;
   lobbyLockToggle: HTMLInputElement | null;
   lobbyRoomNameInput: HTMLInputElement | null;
   clampInt: (value: number, min: number, max: number) => number;
@@ -129,6 +131,12 @@ export class LobbyStateController {
     const infiniteTimeEnabled = this.deps.lobbyInfiniteTimeToggle
       ? !!this.deps.lobbyInfiniteTimeToggle.checked
       : !!(lobbyRoom.settings.infiniteTimeEnabled ?? false);
+    const respawnEnabled = this.deps.lobbyRespawnToggle
+      ? !!this.deps.lobbyRespawnToggle.checked
+      : !!(lobbyRoom.settings.respawnEnabled ?? false);
+    const falloutSkipEnabled = this.deps.lobbyFalloutSkipToggle
+      ? !!this.deps.lobbyFalloutSkipToggle.checked
+      : !!(lobbyRoom.settings.falloutSkipEnabled ?? false);
     const locked = this.deps.lobbyLockToggle ? !!this.deps.lobbyLockToggle.checked : lobbyRoom.settings.locked;
     const gameModeOptions = this.deps.readLobbyGameModeOptionsFromInputs(mode, lobbyRoom.meta?.gameModeOptions);
     lobbyRoom.settings = {
@@ -136,6 +144,8 @@ export class LobbyStateController {
       maxPlayers: nextMax,
       collisionEnabled,
       infiniteTimeEnabled,
+      respawnEnabled,
+      falloutSkipEnabled,
       locked,
     };
     const baseMeta = this.deps.buildRoomMeta() ?? lobbyRoom.meta ?? { status: 'lobby' };
@@ -144,6 +154,8 @@ export class LobbyStateController {
       gameMode: mode,
       gameModeOptions: Object.keys(gameModeOptions).length > 0 ? gameModeOptions : undefined,
     };
+    this.deps.game.roomRespawnEnabled = respawnEnabled;
+    this.deps.game.roomFalloutSkipEnabled = falloutSkipEnabled;
     this.deps.applyGameMode(mode, nextMax, collisionEnabled, infiniteTimeEnabled, gameModeOptions);
     if (this.deps.lobbyMaxPlayersSelect) {
       this.deps.lobbyMaxPlayersSelect.value = String(nextMax);
